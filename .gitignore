@@ -5,5 +5,7 @@ __pycache__/
 *.log
 ips3608_log_*.csv
 *.csv
+ips3608_routines.json
+ips3608_memories.json
 .vscode/
 Manuali/

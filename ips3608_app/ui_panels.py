@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QPushButton,
     QTableWidget,
@@ -93,7 +94,7 @@ class OutputControlPanel(QGroupBox):
         super().__init__("Output Control")
         self.output_status = QLabel("Output OFF")
         self.toggle_btn = QPushButton("START OUTPUT")
-        self.toggle_btn.setMinimumHeight(44)
+        self.toggle_btn.setMinimumHeight(40)
 
         self.vset_spin = QDoubleSpinBox()
         self.vset_spin.setRange(0.0, 36.0)
@@ -112,15 +113,21 @@ class OutputControlPanel(QGroupBox):
         top = QHBoxLayout()
         top.addWidget(self.output_status)
         top.addStretch(1)
+        top.addWidget(self.toggle_btn)
 
-        form = QFormLayout()
-        form.addRow("Vset:", self.vset_spin)
-        form.addRow("Iset:", self.iset_spin)
+        setpoint_row = QWidget()
+        setpoint_layout = QHBoxLayout(setpoint_row)
+        setpoint_layout.setContentsMargins(0, 0, 0, 0)
+        setpoint_layout.addWidget(QLabel("Vset:"))
+        setpoint_layout.addWidget(self.vset_spin)
+        setpoint_layout.addSpacing(16)
+        setpoint_layout.addWidget(QLabel("Iset:"))
+        setpoint_layout.addWidget(self.iset_spin)
+        setpoint_layout.addStretch(1)
 
         layout = QVBoxLayout(self)
         layout.addLayout(top)
-        layout.addWidget(self.toggle_btn)
-        layout.addLayout(form)
+        layout.addWidget(setpoint_row)
 
         self.toggle_btn.clicked.connect(self._on_toggle)
         self.vset_spin.valueChanged.connect(self.voltage_changed.emit)
@@ -136,14 +143,14 @@ class OutputControlPanel(QGroupBox):
     def set_output_state(self, on: bool) -> None:
         if on:
             self.output_status.setText("Output ON")
-            self.output_status.setStyleSheet("color: #22c55e; font-weight: 700;")
+            self.output_status.setStyleSheet("color: #166534; font-weight: 700;")
             self.toggle_btn.setText("STOP OUTPUT")
-            self.toggle_btn.setStyleSheet("font-weight: 700; background-color: #7f1d1d; color: white;")
+            self.toggle_btn.setStyleSheet("font-weight: 700; background-color: #fee2e2; color: #991b1b; border: 1px solid #fca5a5;")
         else:
             self.output_status.setText("Output OFF")
-            self.output_status.setStyleSheet("color: #ef4444; font-weight: 700;")
+            self.output_status.setStyleSheet("color: #b91c1c; font-weight: 700;")
             self.toggle_btn.setText("START OUTPUT")
-            self.toggle_btn.setStyleSheet("font-weight: 700; background-color: #065f46; color: white;")
+            self.toggle_btn.setStyleSheet("font-weight: 700; background-color: #dcfce7; color: #166534; border: 1px solid #86efac;")
 
 
 class MetricCard(QFrame):
@@ -154,9 +161,9 @@ class MetricCard(QFrame):
         self.value_lbl = QLabel(value)
         self.sub_lbl = QLabel(sub)
 
-        self.title_lbl.setStyleSheet("color: #94a3b8; font-size: 12px; font-weight: 600;")
+        self.title_lbl.setStyleSheet("color: #6b7280; font-size: 12px; font-weight: 600;")
         self.value_lbl.setStyleSheet(f"color: {color}; font-size: 34px; font-weight: 800;")
-        self.sub_lbl.setStyleSheet("color: #cbd5e1; font-size: 12px;")
+        self.sub_lbl.setStyleSheet("color: #4b5563; font-size: 12px;")
 
         layout = QVBoxLayout(self)
         layout.addWidget(self.title_lbl)
@@ -315,7 +322,7 @@ class DataloggerPanel(QGroupBox):
         self.status_dot = QLabel("●")
         self.status_label = QLabel("OFF")
         self.running_banner = QLabel("DATALOGGING IN CORSO")
-        self.running_banner.setStyleSheet("color: #fde68a; background: #7c2d12; padding: 4px 8px; border-radius: 6px;")
+        self.running_banner.setStyleSheet("color: #14532d; background: #dcfce7; padding: 4px 8px; border-radius: 6px; border: 1px solid #86efac;")
         self.running_banner.setVisible(False)
 
         self.interval_combo = QComboBox()
@@ -329,6 +336,23 @@ class DataloggerPanel(QGroupBox):
         self.samples_lbl = QLabel("Samples: 0")
         self.duration_lbl = QLabel("Duration: 00:00:00")
         self.last_lbl = QLabel("Last sample: --")
+
+        self.table = QTableWidget(0, 5)
+        self.table.setHorizontalHeaderLabels([
+            "Time",
+            "Voltage V",
+            "Current A",
+            "Power W",
+            "Temperature C",
+        ])
+        self.table.setMaximumHeight(200)
+        self.table.setAlternatingRowColors(True)
+        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setSelectionMode(QTableWidget.SingleSelection)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setStretchLastSection(True)
 
         head = QHBoxLayout()
         head.addWidget(QLabel("Datalogger:"))
@@ -358,6 +382,7 @@ class DataloggerPanel(QGroupBox):
         layout.addLayout(head)
         layout.addLayout(controls)
         layout.addLayout(stats)
+        layout.addWidget(self.table)
 
         self.start_btn.clicked.connect(self.start_log_requested.emit)
         self.stop_btn.clicked.connect(self.stop_log_requested.emit)
@@ -371,11 +396,11 @@ class DataloggerPanel(QGroupBox):
     def set_logging_state(self, on: bool) -> None:
         if on:
             self.status_label.setText("IN CORSO")
-            self.status_dot.setStyleSheet("color: #22c55e; font-size: 18px;")
+            self.status_dot.setStyleSheet("color: #16a34a; font-size: 18px;")
             self.running_banner.setVisible(True)
         else:
             self.status_label.setText("OFF")
-            self.status_dot.setStyleSheet("color: #ef4444; font-size: 18px;")
+            self.status_dot.setStyleSheet("color: #dc2626; font-size: 18px;")
             self.running_banner.setVisible(False)
 
     def update_stats(self, samples: int, duration_sec: int, last_sample: Optional[datetime]) -> None:
@@ -388,6 +413,17 @@ class DataloggerPanel(QGroupBox):
             self.last_lbl.setText("Last sample: --")
         else:
             self.last_lbl.setText(f"Last sample: {last_sample.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    def set_samples(self, samples: list[LogSample]) -> None:
+        self.table.setRowCount(len(samples))
+        for row, sample in enumerate(samples):
+            self.table.setItem(row, 0, QTableWidgetItem(sample.timestamp.strftime("%Y-%m-%d %H:%M:%S")))
+            self.table.setItem(row, 1, QTableWidgetItem(f"{sample.voltage_v:.2f}"))
+            self.table.setItem(row, 2, QTableWidgetItem(f"{sample.current_a:.3f}"))
+            self.table.setItem(row, 3, QTableWidgetItem(f"{sample.power_w:.3f}"))
+            self.table.setItem(row, 4, QTableWidgetItem(f"{sample.temperature_c:.1f}"))
+        self.table.resizeColumnsToContents()
+        self.table.scrollToBottom()
 
 
 class LogTableDialog(QDialog):

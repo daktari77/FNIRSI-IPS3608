@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QDialog,
     QMainWindow,
+    QHBoxLayout,
     QMessageBox,
     QSplitter,
     QStatusBar,
@@ -26,6 +27,7 @@ from PySide6.QtWidgets import (
 
 from .clients import IPS3608Client, SimulatedIPS3608Client
 from .memory_presets import MemoryPresetDialog, MemoryRepository
+from . import __version__
 from .models import AppState, DeviceConfig, LogSample, Measurement, RoutineDefinition, UiState, DEFAULT_DEVICE_CONFIG
 from .routine_dialogs import RoutineManagerDialog
 from .routines import ActiveRoutineRunner, RoutineRepository
@@ -48,7 +50,7 @@ except ImportError as exc:
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("FNIRSI IPS3608 Remote Control")
+        self.setWindowTitle(f"FNIRSI IPS3608 Remote Control v{__version__}")
         self.resize(1360, 900)
 
         self.app_state = AppState()
@@ -159,8 +161,15 @@ class MainWindow(QMainWindow):
     def _build_ui(self) -> None:
         central = QWidget()
         root = QVBoxLayout(central)
-        root.addWidget(self.connection_panel)
-        root.addWidget(self.output_panel)
+
+        top_row = QWidget()
+        top_row_layout = QHBoxLayout(top_row)
+        top_row_layout.setContentsMargins(0, 0, 0, 0)
+        top_row_layout.setSpacing(10)
+        top_row_layout.addWidget(self.connection_panel, 1)
+        top_row_layout.addWidget(self.output_panel, 1)
+
+        root.addWidget(top_row)
         root.addWidget(self.datalogger_panel)
 
         split = QSplitter(Qt.Horizontal)
@@ -216,36 +225,36 @@ class MainWindow(QMainWindow):
     def _apply_style(self) -> None:
         self.setStyleSheet(
             """
-            QMainWindow { background-color: #0b1220; color: #e2e8f0; }
+            QMainWindow { background-color: #f5f7fb; color: #1f2937; }
             QGroupBox {
-                border: 1px solid #334155; border-radius: 8px; margin-top: 10px;
-                font-weight: 700; color: #f8fafc; background: #0f172a;
+                border: 1px solid #d1d5db; border-radius: 8px; margin-top: 10px;
+                font-weight: 700; color: #111827; background: #ffffff;
             }
             QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 6px; }
-            QLabel { color: #e2e8f0; }
+            QLabel { color: #1f2937; }
             QPushButton {
-                background-color: #1e293b; color: #e2e8f0; border: 1px solid #475569;
+                background-color: #ffffff; color: #1f2937; border: 1px solid #cbd5e1;
                 border-radius: 6px; padding: 6px 10px; font-weight: 600;
             }
-            QPushButton:hover { background-color: #334155; }
+            QPushButton:hover { background-color: #e5eef9; }
             QComboBox, QDoubleSpinBox {
-                background-color: #111827; border: 1px solid #475569; border-radius: 5px;
-                padding: 4px; color: #e2e8f0;
+                background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 5px;
+                padding: 4px; color: #111827;
             }
             QTableWidget {
-                background-color: #111827; color: #e5e7eb; gridline-color: #334155;
-                border: 1px solid #334155;
+                background-color: #ffffff; color: #111827; gridline-color: #e5e7eb;
+                border: 1px solid #d1d5db;
             }
             QHeaderView::section {
-                background-color: #1f2937; color: #f8fafc; border: 1px solid #334155;
+                background-color: #e5e7eb; color: #111827; border: 1px solid #d1d5db;
                 padding: 4px;
             }
-            QTextEdit { background-color: #111827; border: 1px solid #334155; color: #e5e7eb; }
-            QFrame#MetricCard { background-color: #111827; border: 1px solid #334155; border-radius: 10px; }
+            QTextEdit { background-color: #ffffff; border: 1px solid #d1d5db; color: #111827; }
+            QFrame#MetricCard { background-color: #ffffff; border: 1px solid #d1d5db; border-radius: 10px; }
             """
         )
-        pg.setConfigOption("background", "#0b1220")
-        pg.setConfigOption("foreground", "#cbd5e1")
+        pg.setConfigOption("background", "#ffffff")
+        pg.setConfigOption("foreground", "#1f2937")
 
     def _status(self, text: str) -> None:
         self.statusBar().showMessage(text, 6000)
@@ -584,6 +593,7 @@ class MainWindow(QMainWindow):
             )
         )
         self._update_log_runtime_info()
+        self.datalogger_panel.set_samples(self.log_samples)
 
     def _update_log_runtime_info(self) -> None:
         last = self.log_samples[-1].timestamp if self.log_samples else None
@@ -599,6 +609,7 @@ class MainWindow(QMainWindow):
                 return
         self.log_samples.clear()
         self.datalogger_panel.update_stats(0, 0, None)
+        self.datalogger_panel.set_samples(self.log_samples)
         if self.log_table_dialog is not None and self.log_table_dialog.isVisible():
             self.log_table_dialog.set_samples(self.log_samples)
         self._status("Log samples cleared.")

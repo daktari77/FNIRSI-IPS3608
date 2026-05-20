@@ -12,11 +12,14 @@ tags:
 created: 2026-05-20
 ---
 
-# IPS3608 - Documentazione Operativa
+## IPS3608 - Documentazione Operativa
 
 Documentazione pratica per controllo dell'alimentatore **FNIRSI IPS3608** via seriale USB su Windows.
 
+Versione attuale dell'app desktop: `1.0.0`
+
 Contenuto principale:
+
 - comunicazione seriale verificata su COM13
 - script PowerShell per misure live
 - CLI Python per set parametri e start/stop
@@ -30,12 +33,14 @@ Contenuto principale:
 Il dispositivo IPS3608 non usa SCPI testuale in questo setup, ma un protocollo binario proprietario FNIRSI.
 
 Parametri seriali funzionanti verificati:
+
 - Porta: `COM13`
 - Baud rate: `9600`
 - Formato: `8N1`
 - Handshake: `None`
 
 Flusso operativo tipico:
+
 1. Impostare parametri `V`, `I`, `T`.
 2. Eseguire `START` per attivare uscita.
 3. Leggere valori live `V/I/P/T`.
@@ -52,29 +57,34 @@ Nella cartella `ips3608_tools`:
 - `ips3608_gui.py`: mini GUI Tkinter con campi V/I/T e pulsanti START/STOP
 - `ips3608_remote_ui.py`: launcher dell'app desktop modulare PySide6
 - `ips3608_app/`: package dell'app desktop con client, UI, memorie e routine
+- `CHANGELOG.md`: cronologia release del progetto
 
 ---
 
 ## 3. Prerequisiti
 
-## 3.1 Python
+### 3.1 Python
 
 Python usato:
+
 - `3.14.x` (system install)
 
-## 3.2 Dipendenze
+### 3.2 Dipendenze
 
 Pacchetto richiesto:
+
 - `pyserial`
 
 Installazione:
+
 ```powershell
 pip install pyserial
 ```
 
-## 3.3 Permessi/Concorrenza
+### 3.3 Permessi/Concorrenza
 
 Note operative:
+
 - Evitare di tenere aperti contemporaneamente CLI/GUI/monitor sulla stessa COM.
 - Se una app tiene bloccata la porta, chiuderla prima di lanciare l'altra.
 
@@ -83,15 +93,18 @@ Note operative:
 ## 4. Protocollo (Sintesi)
 
 Formato comando inviato:
+
 - Header request: `0xF1`
 - Struttura: `[F1] [CmdType] [Register] [Length] [Data...] [Checksum]`
 - Checksum: `(Register + Length + sum(Data)) & 0xFF`
 
 Formato risposta:
+
 - Header response: `0xF0`
 - Struttura: `[F0] [CmdType] [Register] [Length] [Payload...] [Checksum]`
 
 Registri principali usati:
+
 - `0xC1`: set tensione
 - `0xC2`: set corrente
 - `0xC3`: lettura live (V, I, P)
@@ -103,19 +116,19 @@ Registri principali usati:
 
 ## 5. Avvio Rapido
 
-## 5.1 Monitor live PowerShell
+### 5.1 Monitor live PowerShell
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File C:\Users\Utente\ips3608_tools\ips3608_live.ps1 -PortName COM13 -BaudRate 9600 -IntervalMs 500 -Count 20
 ```
 
-## 5.2 Stato singolo (CLI Python)
+### 5.2 Stato singolo (CLI Python)
 
 ```powershell
 python C:\Users\Utente\ips3608_tools\ips3608_cli.py --port COM13 --baud 9600 status
 ```
 
-## 5.3 GUI
+### 5.3 GUI
 
 ```powershell
 python C:\Users\Utente\ips3608_tools\ips3608_gui.py
@@ -127,79 +140,92 @@ python C:\Users\Utente\ips3608_tools\ips3608_gui.py
 
 Questa sezione raccoglie i comandi piu utili, pronti da copiare.
 
-## 6.1 Comandi CLI Python
+### 6.1 Comandi CLI Python
 
 Sintassi base:
+
 ```powershell
 python C:\Users\Utente\ips3608_tools\ips3608_cli.py --port COM13 --baud 9600 <comando>
 ```
 
-### a) Impostazione parametri V/I/T
+#### a) Impostazione parametri V/I/T
 
 Imposta tensione, corrente e limite temperatura OTP:
+
 ```powershell
 python C:\Users\Utente\ips3608_tools\ips3608_cli.py --port COM13 --baud 9600 set 5.0 1.0 60
 ```
 
 Imposta solo V/I (senza modificare T):
+
 ```powershell
 python C:\Users\Utente\ips3608_tools\ips3608_cli.py --port COM13 --baud 9600 set 3.3 0.5
 ```
 
 Range validi:
+
 - V: `0 .. 36`
 - I: `0 .. 8.2`
 - T: `0 .. 99`
 
-### b) Start/Stop uscita
+#### b) Start/Stop uscita
 
 START:
+
 ```powershell
 python C:\Users\Utente\ips3608_tools\ips3608_cli.py --port COM13 --baud 9600 start
 ```
 
 STOP:
+
 ```powershell
 python C:\Users\Utente\ips3608_tools\ips3608_cli.py --port COM13 --baud 9600 stop
 ```
 
 Alias equivalenti:
+
 - `start` == `on`
 - `stop` == `off`
 
-### c) Letture
+#### c) Letture
 
 Lettura singola:
+
 ```powershell
 python C:\Users\Utente\ips3608_tools\ips3608_cli.py --port COM13 --baud 9600 status
 ```
 
 Lettura continua (20 campioni):
+
 ```powershell
 python C:\Users\Utente\ips3608_tools\ips3608_cli.py --port COM13 --baud 9600 live --interval 0.5 --count 20
 ```
 
 Loop continuo (fino a Ctrl+C):
+
 ```powershell
 python C:\Users\Utente\ips3608_tools\ips3608_cli.py --port COM13 --baud 9600 live --interval 1.0 --count 0
 ```
 
-## 6.2 Comandi PowerShell
+### 6.2 Comandi PowerShell
 
 Monitor live rapido:
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File C:\Users\Utente\ips3608_tools\ips3608_live.ps1 -PortName COM13 -BaudRate 9600 -IntervalMs 300 -Count 10
 ```
 
 Parametri utili script PowerShell:
+
 - `-PortName` (default `COM13`)
 - `-BaudRate` (default `9600`)
 - `-IntervalMs` intervallo campionamento
 - `-Count` numero righe (`<=0` infinito)
 
-## 6.3 Flusso GUI (operatore)
+### 6.3 Flusso GUI (operatore)
 
 Workflow consigliato:
+
 1. Avvia `ips3608_gui.py`
 2. `Connect`
 3. Inserisci `V`, `I`, `T`
@@ -214,11 +240,13 @@ Workflow consigliato:
 ## 7. Desktop App Attuale
 
 L'app desktop corrente si avvia con:
+
 ```powershell
 python C:\Users\Utente\ips3608_tools\ips3608_remote_ui.py
 ```
 
 Caratteristiche attuali:
+
 - modalita' reale e simulata
 - pannello connessione separato dal controllo output
 - card realtime per tensione, corrente, temperatura e potenza
@@ -229,11 +257,13 @@ Caratteristiche attuali:
 - memorie fisse M1..M6 con salvataggio e richiamo dei setpoint
 
 Memorie M1..M6:
+
 - ogni slot puo' salvare nome, Vset e Iset
 - i preset sono persistenti su file JSON locale
 - il richiamo preset aggiorna i campi output e invia i setpoint al device se connesso
 
 Note operative:
+
 - Vset supportato: 0..36.00 V
 - Iset supportato: 0..8.20 A
 - temperatura continua a essere visibile nelle card realtime anche se non e' plottata
@@ -242,7 +272,7 @@ Note operative:
 
 ## 8. Esempi Operativi
 
-## 7.1 Test a vuoto 3V
+### 8.1 Test a vuoto 3V
 
 ```powershell
 python C:\Users\Utente\ips3608_tools\ips3608_cli.py --port COM13 --baud 9600 set 3.0 1.0 60
@@ -251,7 +281,7 @@ python C:\Users\Utente\ips3608_tools\ips3608_cli.py --port COM13 --baud 9600 sta
 python C:\Users\Utente\ips3608_tools\ips3608_cli.py --port COM13 --baud 9600 stop
 ```
 
-## 7.2 Monitor continuo durante test carico
+### 8.2 Monitor continuo durante test carico
 
 ```powershell
 python C:\Users\Utente\ips3608_tools\ips3608_cli.py --port COM13 --baud 9600 live --interval 0.2 --count 0
@@ -261,25 +291,28 @@ python C:\Users\Utente\ips3608_tools\ips3608_cli.py --port COM13 --baud 9600 liv
 
 ## 9. Troubleshooting
 
-## 8.1 Errore porta occupata
+### 9.1 Errore porta occupata
 
 Sintomo:
+
 - errore apertura COM13
 
 Azioni:
+
 1. Chiudere GUI/CLI/monitor gia aperti.
 2. Verificare che software terzi non stiano usando COM13.
 3. Ricollegare cavo USB-C e riprovare.
 
-## 8.2 Nessuna risposta
+### 9.2 Nessuna risposta
 
 Azioni:
+
 1. Verificare porta corretta (`COM13`).
 2. Verificare baud (`9600`).
 3. Verificare cavo dati (non solo ricarica).
 4. Spegnere/riaccendere alimentatore.
 
-## 8.3 pyserial mancante
+### 9.3 pyserial mancante
 
 ```powershell
 pip install pyserial
@@ -290,6 +323,7 @@ pip install pyserial
 ## 10. Sicurezza Operativa
 
 Raccomandazioni:
+
 - Prima di `START`, verificare sempre i setpoint.
 - Per test iniziali, usare corrente limitata.
 - Evitare variazioni brusche con carichi sensibili.
@@ -297,9 +331,10 @@ Raccomandazioni:
 
 ---
 
-## 10. Possibili Estensioni
+## 11. Possibili Estensioni
 
 Idee future:
+
 - logging CSV automatico (timestamp, V, I, P, T)
 - profili preset richiamabili da GUI
 - allarmi software su soglie V/I/T
