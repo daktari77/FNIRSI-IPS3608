@@ -9,18 +9,13 @@ from PySide6.QtCore import QTimer, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QComboBox,
-    QDialog,
     QDoubleSpinBox,
-    QFormLayout,
     QFrame,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
     QPushButton,
-    QTableWidget,
-    QTableWidgetItem,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -36,10 +31,10 @@ class ConnectionPanel(QGroupBox):
 
     def __init__(self):
         super().__init__("Connection")
+
         self.port_combo = QComboBox()
         self.refresh_btn = QPushButton("Refresh")
-        self.connect_btn = QPushButton("Connect")
-        self.disconnect_btn = QPushButton("Disconnect")
+        self.conn_btn = QPushButton("Connect")
         self.status_dot = QLabel("●")
         self.status_label = QLabel("Disconnected")
 
@@ -47,8 +42,7 @@ class ConnectionPanel(QGroupBox):
         row.addWidget(QLabel("Port:"))
         row.addWidget(self.port_combo, stretch=1)
         row.addWidget(self.refresh_btn)
-        row.addWidget(self.connect_btn)
-        row.addWidget(self.disconnect_btn)
+        row.addWidget(self.conn_btn)
 
         st = QHBoxLayout()
         st.addWidget(QLabel("Status:"))
@@ -62,8 +56,39 @@ class ConnectionPanel(QGroupBox):
         self.status_dot.setStyleSheet("color: #ef4444; font-size: 18px;")
 
         self.refresh_btn.clicked.connect(self.refresh_ports_requested.emit)
-        self.connect_btn.clicked.connect(lambda: self.connect_requested.emit(self.port_combo.currentText().strip()))
-        self.disconnect_btn.clicked.connect(self.disconnect_requested.emit)
+        self.conn_btn.clicked.connect(self._on_conn_btn)
+
+        self._connected = False
+
+    def _on_conn_btn(self):
+        if not self._connected:
+            self.connect_requested.emit(self.port_combo.currentText().strip())
+        else:
+            self.disconnect_requested.emit()
+
+    def set_connection_state(self, text: str, color: str) -> None:
+        self.status_label.setText(text)
+        self.status_dot.setStyleSheet(f"color: {color}; font-size: 18px;")
+        if text.lower().startswith("connected"):
+            self.conn_btn.setText("Disconnect")
+            self._connected = True
+            self.conn_btn.setStyleSheet("font-weight: 700; background-color: #dcfce7; color: #166534; border: 1px solid #86efac;")
+        elif text.lower().startswith("disconnected"):
+            self.conn_btn.setText("Connect")
+            self._connected = False
+            self.conn_btn.setStyleSheet("font-weight: 700; background-color: #fee2e2; color: #991b1b; border: 1px solid #fca5a5;")
+        elif text.lower().startswith("connecting"):
+            self.conn_btn.setText("Connect")
+            self._connected = False
+            self.conn_btn.setStyleSheet("font-weight: 700; background-color: #fef9c3; color: #a16207; border: 1px solid #fde047;")
+        elif text.lower().startswith("communication error"):
+            self.conn_btn.setText("Connect")
+            self._connected = False
+            self.conn_btn.setStyleSheet("font-weight: 700; background-color: #fed7aa; color: #b45309; border: 1px solid #fb923c;")
+        else:
+            self.conn_btn.setText("Connect")
+            self._connected = False
+            self.conn_btn.setStyleSheet("")
 
     def set_ports(self, ports: list[str], include_simulated: bool) -> None:
         current = self.port_combo.currentText()
@@ -79,12 +104,8 @@ class ConnectionPanel(QGroupBox):
             self.port_combo.setCurrentIndex(idx)
         self.port_combo.blockSignals(False)
 
-    def set_connection_state(self, text: str, color: str) -> None:
-        self.status_label.setText(text)
-        self.status_dot.setStyleSheet(f"color: {color}; font-size: 18px;")
-
-
 class OutputControlPanel(QGroupBox):
+    temperature_limit_changed = Signal(float)
     start_output_requested = Signal()
     stop_output_requested = Signal()
     voltage_changed = Signal(float)
@@ -110,6 +131,13 @@ class OutputControlPanel(QGroupBox):
         self.iset_spin.setValue(1.500)
         self.iset_spin.setSuffix(" A")
 
+        self.temp_limit_spin = QDoubleSpinBox()
+        self.temp_limit_spin.setRange(0.0, 100.0)
+        self.temp_limit_spin.setDecimals(1)
+        self.temp_limit_spin.setSingleStep(0.5)
+        self.temp_limit_spin.setValue(60.0)
+        self.temp_limit_spin.setSuffix(" °C")
+
         top = QHBoxLayout()
         top.addWidget(self.output_status)
         top.addStretch(1)
@@ -123,6 +151,9 @@ class OutputControlPanel(QGroupBox):
         setpoint_layout.addSpacing(16)
         setpoint_layout.addWidget(QLabel("Iset:"))
         setpoint_layout.addWidget(self.iset_spin)
+        setpoint_layout.addSpacing(16)
+        setpoint_layout.addWidget(QLabel("Tmax:"))
+        setpoint_layout.addWidget(self.temp_limit_spin)
         setpoint_layout.addStretch(1)
 
         layout = QVBoxLayout(self)
@@ -132,6 +163,7 @@ class OutputControlPanel(QGroupBox):
         self.toggle_btn.clicked.connect(self._on_toggle)
         self.vset_spin.valueChanged.connect(self.voltage_changed.emit)
         self.iset_spin.valueChanged.connect(self.current_changed.emit)
+        self.temp_limit_spin.valueChanged.connect(self.temperature_limit_changed.emit)
         self.set_output_state(False)
 
     def _on_toggle(self) -> None:
@@ -337,22 +369,6 @@ class DataloggerPanel(QGroupBox):
         self.duration_lbl = QLabel("Duration: 00:00:00")
         self.last_lbl = QLabel("Last sample: --")
 
-        self.table = QTableWidget(0, 5)
-        self.table.setHorizontalHeaderLabels([
-            "Time",
-            "Voltage V",
-            "Current A",
-            "Power W",
-            "Temperature C",
-        ])
-        self.table.setMaximumHeight(200)
-        self.table.setAlternatingRowColors(True)
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SingleSelection)
-        self.table.verticalHeader().setVisible(False)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setStretchLastSection(True)
 
         head = QHBoxLayout()
         head.addWidget(QLabel("Datalogger:"))
@@ -382,7 +398,6 @@ class DataloggerPanel(QGroupBox):
         layout.addLayout(head)
         layout.addLayout(controls)
         layout.addLayout(stats)
-        layout.addWidget(self.table)
 
         self.start_btn.clicked.connect(self.start_log_requested.emit)
         self.stop_btn.clicked.connect(self.stop_log_requested.emit)
@@ -415,63 +430,11 @@ class DataloggerPanel(QGroupBox):
             self.last_lbl.setText(f"Last sample: {last_sample.strftime('%Y-%m-%d %H:%M:%S')}")
 
     def set_samples(self, samples: list[LogSample]) -> None:
-        self.table.setRowCount(len(samples))
-        for row, sample in enumerate(samples):
-            self.table.setItem(row, 0, QTableWidgetItem(sample.timestamp.strftime("%Y-%m-%d %H:%M:%S")))
-            self.table.setItem(row, 1, QTableWidgetItem(f"{sample.voltage_v:.2f}"))
-            self.table.setItem(row, 2, QTableWidgetItem(f"{sample.current_a:.3f}"))
-            self.table.setItem(row, 3, QTableWidgetItem(f"{sample.power_w:.3f}"))
-            self.table.setItem(row, 4, QTableWidgetItem(f"{sample.temperature_c:.1f}"))
-        self.table.resizeColumnsToContents()
-        self.table.scrollToBottom()
-
-
-class LogTableDialog(QDialog):
-    export_requested = Signal()
-    clear_requested = Signal()
-
-    def __init__(self, parent: QWidget):
-        super().__init__(parent)
-        self.setWindowTitle("Log Samples")
-        self.resize(760, 420)
-
-        self.table = QTableWidget(0, 5)
-        self.table.setHorizontalHeaderLabels([
-            "Time",
-            "Voltage V",
-            "Current A",
-            "Power W",
-            "Temperature C",
-        ])
-
-        self.export_btn = QPushButton("Export CSV")
-        self.clear_btn = QPushButton("Clear Log")
-        self.close_btn = QPushButton("Close")
-
-        controls = QHBoxLayout()
-        controls.addWidget(self.export_btn)
-        controls.addWidget(self.clear_btn)
-        controls.addStretch(1)
-        controls.addWidget(self.close_btn)
-
-        layout = QVBoxLayout(self)
-        layout.addWidget(self.table)
-        layout.addLayout(controls)
-
-        self.export_btn.clicked.connect(self.export_requested.emit)
-        self.clear_btn.clicked.connect(self.clear_requested.emit)
-        self.close_btn.clicked.connect(self.close)
-
-    def set_samples(self, samples: list[LogSample]) -> None:
-        self.table.setRowCount(len(samples))
-        for row, sample in enumerate(samples):
-            self.table.setItem(row, 0, QTableWidgetItem(sample.timestamp.strftime("%Y-%m-%d %H:%M:%S")))
-            self.table.setItem(row, 1, QTableWidgetItem(f"{sample.voltage_v:.2f}"))
-            self.table.setItem(row, 2, QTableWidgetItem(f"{sample.current_a:.3f}"))
-            self.table.setItem(row, 3, QTableWidgetItem(f"{sample.power_w:.3f}"))
-            self.table.setItem(row, 4, QTableWidgetItem(f"{sample.temperature_c:.1f}"))
-        self.table.resizeColumnsToContents()
-        self.table.scrollToBottom()
+        self.samples_lbl.setText(f"Samples: {len(samples)}")
+        if samples:
+            self.last_lbl.setText(f"Last sample: {samples[-1].timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
+        else:
+            self.last_lbl.setText("Last sample: --")
 
 
 class StatusLogPanel(QGroupBox):

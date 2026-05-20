@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
@@ -11,7 +12,6 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFormLayout,
     QHBoxLayout,
-    QInputDialog,
     QLabel,
     QListWidget,
     QMessageBox,
@@ -31,6 +31,18 @@ class MemoryRepository:
     def __init__(self, file_path: Path):
         self.file_path = file_path
 
+    def _backup_path(self, suffix: str = "") -> Path:
+        backup_dir = self.file_path.parent / "backup" / "v1"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        tag = f"_{suffix}" if suffix else ""
+        return backup_dir / f"{self.file_path.stem}{tag}_{time.strftime('%Y%m%d_%H%M%S')}.json"
+
+    def _write_json_atomic(self, payload: object) -> None:
+        self.file_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = self.file_path.with_suffix(f"{self.file_path.suffix}.tmp")
+        tmp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        tmp_path.replace(self.file_path)
+
     def load_all(self) -> list[MemoryPreset]:
         presets = [MemoryPreset(slot_id=slot) for slot in DEFAULT_SLOT_IDS]
         if not self.file_path.exists():
@@ -41,8 +53,19 @@ class MemoryRepository:
         except Exception:
             return presets
 
+        # Migrazione automatica: se è una lista, convertila in oggetto versionato
+        if isinstance(raw, list):
+            # Backup vecchio formato
+            self._backup_path("legacy").write_text(json.dumps(raw, indent=2), encoding="utf-8")
+            raw = {"version": 2, "presets": raw}
+            # Aggiorna file
+            self._write_json_atomic(raw)
+        if not isinstance(raw, dict):
+            return presets
+
+        items = raw.get("presets", [])
         by_slot = {p.slot_id: p for p in presets}
-        for item in raw:
+        for item in items:
             slot_id = str(item.get("slot_id", "")).strip().upper()
             if slot_id in by_slot:
                 preset = by_slot[slot_id]
@@ -53,7 +76,14 @@ class MemoryRepository:
         return presets
 
     def save_all(self, presets: list[MemoryPreset]) -> None:
-        self.file_path.write_text(json.dumps([asdict(p) for p in presets], indent=2), encoding="utf-8")
+        # Backup prima di ogni salvataggio
+        if self.file_path.exists():
+            self._backup_path().write_text(self.file_path.read_text(encoding="utf-8"), encoding="utf-8")
+        serializable = {
+            "version": 2,
+            "presets": [asdict(p) for p in presets]
+        }
+        self._write_json_atomic(serializable)
 
 
 class MemoryPresetDialog(QDialog):

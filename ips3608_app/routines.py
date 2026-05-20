@@ -13,12 +13,34 @@ class RoutineRepository:
     def __init__(self, file_path: Path):
         self.file_path = file_path
 
+    def _backup_path(self, suffix: str = "") -> Path:
+        backup_dir = self.file_path.parent / "backup" / "v1"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        tag = f"_{suffix}" if suffix else ""
+        return backup_dir / f"{self.file_path.stem}{tag}_{time.strftime('%Y%m%d_%H%M%S')}.json"
+
+    def _write_json_atomic(self, payload: object) -> None:
+        self.file_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = self.file_path.with_suffix(f"{self.file_path.suffix}.tmp")
+        tmp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        tmp_path.replace(self.file_path)
+
     def load_all(self) -> list[RoutineDefinition]:
         if not self.file_path.exists():
             return []
         raw = json.loads(self.file_path.read_text(encoding="utf-8"))
+        # Migrazione automatica: se è una lista, convertila in oggetto versionato
+        if isinstance(raw, list):
+            # Backup vecchio formato
+            self._backup_path("legacy").write_text(json.dumps(raw, indent=2), encoding="utf-8")
+            raw = {"version": 2, "routines": raw}
+            # Aggiorna file
+            self._write_json_atomic(raw)
+        if not isinstance(raw, dict):
+            return []
+        routines = raw.get("routines", [])
         out: list[RoutineDefinition] = []
-        for item in raw:
+        for item in routines:
             steps = [RoutineStep(**step) for step in item.get("steps", [])]
             out.append(
                 RoutineDefinition(
@@ -31,8 +53,13 @@ class RoutineRepository:
         return out
 
     def save_all(self, routines: list[RoutineDefinition]) -> None:
-        serializable = [asdict(r) for r in routines]
-        self.file_path.write_text(json.dumps(serializable, indent=2), encoding="utf-8")
+        if self.file_path.exists():
+            self._backup_path().write_text(self.file_path.read_text(encoding="utf-8"), encoding="utf-8")
+        serializable = {
+            "version": 2,
+            "routines": [asdict(r) for r in routines]
+        }
+        self._write_json_atomic(serializable)
 
 
 class ActiveRoutineRunner:

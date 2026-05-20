@@ -35,11 +35,11 @@ from .ui_panels import (
     ConnectionPanel,
     DataloggerPanel,
     GraphPanel,
-    LogTableDialog,
     OutputControlPanel,
     RealtimeCardsPanel,
     StatusLogPanel,
 )
+from .log_table_dock import LogTableDockWidget
 
 try:
     from serial.tools import list_ports
@@ -58,13 +58,17 @@ class MainWindow(QMainWindow):
         self.device_client: Optional[object] = None
         self.log_samples: list[LogSample] = []
         self.last_measurement: Optional[Measurement] = None
-        self.log_table_dialog: Optional[LogTableDialog] = None
+        self.log_table_dock: Optional[LogTableDockWidget] = None
         self.routine_repository = RoutineRepository(Path.cwd() / "ips3608_routines.json")
         self.routines: list[RoutineDefinition] = self.routine_repository.load_all()
         self.active_routine: Optional[ActiveRoutineRunner] = None
         self.active_routine_name: str = "--"
         self.last_routine_setpoint_mono = 0.0
-        self.memory_repository = MemoryRepository(Path.cwd() / "ips3608_memories.json")
+        # Supporto nuovo formato memory_presets.json, fallback legacy
+        mem_path = Path.cwd() / "memory_presets.json"
+        if not mem_path.exists():
+            mem_path = Path.cwd() / "ips3608_memories.json"
+        self.memory_repository = MemoryRepository(mem_path)
         self.memory_presets = self.memory_repository.load_all()
 
         self.connection_panel = ConnectionPanel()
@@ -192,6 +196,8 @@ class MainWindow(QMainWindow):
         self.output_panel.stop_output_requested.connect(self.stop_output)
         self.output_panel.voltage_changed.connect(self.on_voltage_changed)
         self.output_panel.current_changed.connect(self.on_current_changed)
+        self.output_panel.temperature_limit_changed.connect(self.on_temperature_limit_changed)
+        self.temperature_limit = self.output_panel.temp_limit_spin.value()
 
         self.datalogger_panel.start_log_requested.connect(self.start_logging)
         self.datalogger_panel.stop_log_requested.connect(self.stop_logging)
@@ -221,6 +227,9 @@ class MainWindow(QMainWindow):
         self.act_routine_manage.triggered.connect(self.manage_routines)
         self.act_routine_stop.triggered.connect(self.stop_active_routine)
         self.act_memory_manage.triggered.connect(self.manage_memories)
+
+    def on_temperature_limit_changed(self, value: float) -> None:
+        self.temperature_limit = value
 
     def _apply_style(self) -> None:
         self.setStyleSheet(
@@ -323,6 +332,7 @@ class MainWindow(QMainWindow):
 
             assert self.device_client is not None
             self.device_client.connect()
+            # AGGIORNA STATO PRIMA DELLA UI
             self.app_state.connected = True
             self.app_state.output_on = False
             self.app_state.last_error = "--"
@@ -340,6 +350,7 @@ class MainWindow(QMainWindow):
             self._status(f"Connected ({conn_kind}) on {cfg.port}.")
         except Exception as exc:
             self.app_state.last_error = str(exc)
+            self.app_state.connected = False
             self._set_ui_state(UiState.COMMUNICATION_ERROR)
             self._status(f"Connection error: {exc}")
 
@@ -427,13 +438,15 @@ class MainWindow(QMainWindow):
             self.app_state.last_data_ts = m.timestamp
             self.app_state.last_error = "--"
 
+            # Stop output se supera la soglia temperatura
+            if m.temperature_c >= self.temperature_limit and self.app_state.output_on:
+                self.stop_output()
+                QMessageBox.warning(self, "Temperatura Superata", f"Temperatura {m.temperature_c:.1f}°C >= soglia {self.temperature_limit:.1f}°C. Output spento automaticamente.")
+
             self.cards_panel.update_measurement(m, self.output_panel.vset_spin.value(), self.output_panel.iset_spin.value())
             self.graph_panel.add_measurement(m)
             self._maybe_append_log_sample(m)
             self._refresh_status_summary()
-
-            if self.log_table_dialog is not None and self.log_table_dialog.isVisible() and self.app_state.logging_on:
-                self.log_table_dialog.set_samples(self.log_samples)
         except Exception as exc:
             self._handle_communication_error(f"Read cycle error: {exc}")
 
@@ -594,6 +607,8 @@ class MainWindow(QMainWindow):
         )
         self._update_log_runtime_info()
         self.datalogger_panel.set_samples(self.log_samples)
+        if self.log_table_dock is not None and self.log_table_dock.isVisible():
+            self.log_table_dock.set_samples(self.log_samples)
 
     def _update_log_runtime_info(self) -> None:
         last = self.log_samples[-1].timestamp if self.log_samples else None
@@ -610,22 +625,28 @@ class MainWindow(QMainWindow):
         self.log_samples.clear()
         self.datalogger_panel.update_stats(0, 0, None)
         self.datalogger_panel.set_samples(self.log_samples)
-        if self.log_table_dialog is not None and self.log_table_dialog.isVisible():
-            self.log_table_dialog.set_samples(self.log_samples)
+        if self.log_table_dock is not None and self.log_table_dock.isVisible():
+            self.log_table_dock.set_samples(self.log_samples)
         self._status("Log samples cleared.")
 
     def show_log_table(self) -> None:
-        if self.log_table_dialog is None:
-            self.log_table_dialog = LogTableDialog(self)
-            self.log_table_dialog.export_requested.connect(self.export_log_csv)
-            self.log_table_dialog.clear_requested.connect(self._clear_log_from_dialog)
+        if self.log_table_dock is None:
+            self.log_table_dock = LogTableDockWidget(self)
+            self.log_table_dock.export_requested.connect(self.export_log_csv)
+            self.log_table_dock.clear_requested.connect(self._clear_log_from_dock)
+            self.log_table_dock.close_requested.connect(self._on_log_dock_closed)
+            self.addDockWidget(Qt.RightDockWidgetArea, self.log_table_dock)
 
-        self.log_table_dialog.set_samples(self.log_samples)
-        self.log_table_dialog.show()
-        self.log_table_dialog.raise_()
-        self.log_table_dialog.activateWindow()
+        self.log_table_dock.set_samples(self.log_samples)
+        self.log_table_dock.setVisible(True)
+        self.log_table_dock.raise_()
+        self.log_table_dock.activateWindow()
 
-    def _clear_log_from_dialog(self) -> None:
+    def _on_log_dock_closed(self) -> None:
+        if self.log_table_dock is not None:
+            self.log_table_dock.setVisible(False)
+
+    def _clear_log_from_dock(self) -> None:
         if not self.log_samples:
             return
         if QMessageBox.question(self, "Clear log", "Clear all samples from the log table?") != QMessageBox.Yes:
@@ -673,39 +694,34 @@ class MainWindow(QMainWindow):
         logging_on = self.app_state.logging_on
 
         if state == UiState.DISCONNECTED:
-            self.connection_panel.connect_btn.setEnabled(True)
-            self.connection_panel.disconnect_btn.setEnabled(False)
+            self.connection_panel.conn_btn.setEnabled(True)
             self.connection_panel.set_connection_state("Disconnected", "#ef4444")
             self.output_panel.toggle_btn.setEnabled(False)
             self.output_panel.set_output_state(False)
             self.datalogger_panel.start_btn.setEnabled(False)
             self.datalogger_panel.stop_btn.setEnabled(False)
         elif state == UiState.CONNECTING:
-            self.connection_panel.connect_btn.setEnabled(False)
-            self.connection_panel.disconnect_btn.setEnabled(False)
+            self.connection_panel.conn_btn.setEnabled(False)
             self.connection_panel.set_connection_state("Connecting...", "#eab308")
             self.output_panel.toggle_btn.setEnabled(False)
             self.datalogger_panel.start_btn.setEnabled(False)
             self.datalogger_panel.stop_btn.setEnabled(False)
         elif state == UiState.CONNECTED_OUTPUT_OFF:
-            self.connection_panel.connect_btn.setEnabled(False)
-            self.connection_panel.disconnect_btn.setEnabled(True)
+            self.connection_panel.conn_btn.setEnabled(True)
             self.connection_panel.set_connection_state("Connected", "#22c55e")
             self.output_panel.toggle_btn.setEnabled(True)
             self.output_panel.set_output_state(False)
             self.datalogger_panel.start_btn.setEnabled(not logging_on)
             self.datalogger_panel.stop_btn.setEnabled(logging_on)
         elif state == UiState.CONNECTED_OUTPUT_ON:
-            self.connection_panel.connect_btn.setEnabled(False)
-            self.connection_panel.disconnect_btn.setEnabled(True)
+            self.connection_panel.conn_btn.setEnabled(True)
             self.connection_panel.set_connection_state("Connected", "#22c55e")
             self.output_panel.toggle_btn.setEnabled(True)
             self.output_panel.set_output_state(True)
             self.datalogger_panel.start_btn.setEnabled(not logging_on)
             self.datalogger_panel.stop_btn.setEnabled(logging_on)
         elif state == UiState.COMMUNICATION_ERROR:
-            self.connection_panel.connect_btn.setEnabled(not connected)
-            self.connection_panel.disconnect_btn.setEnabled(connected)
+            self.connection_panel.conn_btn.setEnabled(True)
             self.connection_panel.set_connection_state("Communication error", "#f97316")
             self.output_panel.toggle_btn.setEnabled(False)
             self.datalogger_panel.start_btn.setEnabled(False)
@@ -762,4 +778,7 @@ def main() -> int:
     app.setFont(QFont("Segoe UI", 10))
     win = MainWindow()
     win.show()
+    # Shortcut per View Log Table (Ctrl+L)
+    from PySide6.QtGui import QKeySequence, QShortcut
+    QShortcut(QKeySequence("Ctrl+L"), win, win.show_log_table)
     return app.exec()

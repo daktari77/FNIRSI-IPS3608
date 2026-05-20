@@ -9,23 +9,27 @@ import sys
 import time
 from typing import Iterable, Optional
 
+from ips3608_app.serial_commands import (
+    CMD_CONNECT,
+    CMD_READ,
+    CMD_WRITE_BYTE,
+    REG_LIVE,
+    REG_OTP_LIMIT,
+    REG_OUTPUT,
+    REG_SET_CURR,
+    REG_SET_VOLT,
+    REG_TEMP,
+    build_packet,
+    parse_live_payload,
+    parse_temp_payload,
+    validate_frame,
+)
+
 try:
     import serial
 except ImportError:
     print("Missing dependency: pyserial. Install with: pip install pyserial", file=sys.stderr)
     sys.exit(2)
-
-
-CMD_READ = 0xA1
-CMD_WRITE_BYTE = 0xB1
-CMD_CONNECT = 0xC1
-
-REG_SET_VOLT = 0xC1
-REG_SET_CURR = 0xC2
-REG_LIVE = 0xC3
-REG_TEMP = 0xC4
-REG_OTP_LIMIT = 0xD4
-REG_OUTPUT = 0xDB
 
 
 class IPS3608:
@@ -58,9 +62,7 @@ class IPS3608:
 
     @staticmethod
     def _make_cmd(cmd_type: int, register: int, data: bytes) -> bytes:
-        length = len(data)
-        checksum = (register + length + sum(data)) & 0xFF
-        return bytes([0xF1, cmd_type, register, length]) + data + bytes([checksum])
+        return build_packet(cmd_type, register, data)
 
     def connect(self) -> None:
         self._ser.reset_input_buffer()
@@ -97,13 +99,7 @@ class IPS3608:
 
     @staticmethod
     def _valid_checksum(frame: bytes) -> bool:
-        if len(frame) < 5 or frame[0] != 0xF0:
-            return False
-        reg = frame[2]
-        ln = frame[3]
-        payload = frame[4 : 4 + ln]
-        cs = frame[4 + ln]
-        return ((reg + ln + sum(payload)) & 0xFF) == cs
+        return validate_frame(frame)
 
     def set_voltage(self, volts: float) -> None:
         self.send(CMD_WRITE_BYTE, REG_SET_VOLT, struct.pack("<f", volts))
@@ -121,19 +117,14 @@ class IPS3608:
         self.send(CMD_READ, REG_LIVE, b"\x00")
         for f in self.read_frames(0.6):
             if len(f) >= 17 and f[1] == CMD_READ and f[2] == REG_LIVE and f[3] == 0x0C:
-                p = f[4:16]
-                return (
-                    struct.unpack("<f", p[0:4])[0],
-                    struct.unpack("<f", p[4:8])[0],
-                    struct.unpack("<f", p[8:12])[0],
-                )
+                return parse_live_payload(f[4:16])
         return None
 
     def read_temp(self) -> Optional[float]:
         self.send(CMD_READ, REG_TEMP, b"\x00")
         for f in self.read_frames(0.4):
             if len(f) >= 9 and f[1] == CMD_READ and f[2] == REG_TEMP and f[3] == 0x04:
-                return struct.unpack("<f", f[4:8])[0]
+                return parse_temp_payload(f[4:8])
         return None
 
 
