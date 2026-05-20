@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.log
+ips3608_log_*.csv
+*.csv
+.vscode/
+Manuali/
