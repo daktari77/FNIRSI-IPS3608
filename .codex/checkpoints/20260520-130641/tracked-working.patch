@@ -1,0 +1,463 @@
+diff --git a/ips3608_app/main_window.py b/ips3608_app/main_window.py
+index db0c64f..bc4216a 100644
+--- a/ips3608_app/main_window.py
++++ b/ips3608_app/main_window.py
+@@ -35,11 +35,11 @@ from .ui_panels import (
+     ConnectionPanel,
+     DataloggerPanel,
+     GraphPanel,
+-    LogTableDialog,
+     OutputControlPanel,
+     RealtimeCardsPanel,
+     StatusLogPanel,
+ )
++from .log_table_dock import LogTableDockWidget
+ 
+ try:
+     from serial.tools import list_ports
+@@ -58,13 +58,17 @@ class MainWindow(QMainWindow):
+         self.device_client: Optional[object] = None
+         self.log_samples: list[LogSample] = []
+         self.last_measurement: Optional[Measurement] = None
+-        self.log_table_dialog: Optional[LogTableDialog] = None
++        self.log_table_dock: Optional[LogTableDockWidget] = None
+         self.routine_repository = RoutineRepository(Path.cwd() / "ips3608_routines.json")
+         self.routines: list[RoutineDefinition] = self.routine_repository.load_all()
+         self.active_routine: Optional[ActiveRoutineRunner] = None
+         self.active_routine_name: str = "--"
+         self.last_routine_setpoint_mono = 0.0
+-        self.memory_repository = MemoryRepository(Path.cwd() / "ips3608_memories.json")
++        # Supporto nuovo formato memory_presets.json, fallback legacy
++        mem_path = Path.cwd() / "memory_presets.json"
++        if not mem_path.exists():
++            mem_path = Path.cwd() / "ips3608_memories.json"
++        self.memory_repository = MemoryRepository(mem_path)
+         self.memory_presets = self.memory_repository.load_all()
+ 
+         self.connection_panel = ConnectionPanel()
+@@ -192,11 +196,29 @@ class MainWindow(QMainWindow):
+         self.output_panel.stop_output_requested.connect(self.stop_output)
+         self.output_panel.voltage_changed.connect(self.on_voltage_changed)
+         self.output_panel.current_changed.connect(self.on_current_changed)
++        self.output_panel.temperature_limit_changed.connect(self.on_temperature_limit_changed)
++        self.temperature_limit = self.output_panel.temp_limit_spin.value()
++    def on_temperature_limit_changed(self, value: float) -> None:
++        self.temperature_limit = value
+ 
+         self.datalogger_panel.start_log_requested.connect(self.start_logging)
+         self.datalogger_panel.stop_log_requested.connect(self.stop_logging)
+         self.datalogger_panel.show_table_requested.connect(self.show_log_table)
+         self.datalogger_panel.export_csv_requested.connect(self.export_log_csv)
++        self.datalogger_panel.debug_log_requested.connect(self._debug_log_entry)
++
++    def _debug_log_entry(self):
++        from datetime import datetime
++        import random
++        m = type('FakeMeasurement', (), {})()
++        m.timestamp = datetime.now()
++        m.voltage_v = random.uniform(0, 36)
++        m.current_a = random.uniform(0, 8)
++        m.temperature_c = random.uniform(20, 80)
++        m.power_w = m.voltage_v * m.current_a
++        self._status("DEBUG: aggiunto log sample fittizio e apertura log table")
++        self.append_log_sample(m)
++        self.show_log_table()
+ 
+         self.act_export_file.triggered.connect(self.export_log_csv)
+         self.act_exit.triggered.connect(self.close)
+@@ -323,6 +345,7 @@ class MainWindow(QMainWindow):
+ 
+             assert self.device_client is not None
+             self.device_client.connect()
++            # AGGIORNA STATO PRIMA DELLA UI
+             self.app_state.connected = True
+             self.app_state.output_on = False
+             self.app_state.last_error = "--"
+@@ -340,6 +363,7 @@ class MainWindow(QMainWindow):
+             self._status(f"Connected ({conn_kind}) on {cfg.port}.")
+         except Exception as exc:
+             self.app_state.last_error = str(exc)
++            self.app_state.connected = False
+             self._set_ui_state(UiState.COMMUNICATION_ERROR)
+             self._status(f"Connection error: {exc}")
+ 
+@@ -427,13 +451,15 @@ class MainWindow(QMainWindow):
+             self.app_state.last_data_ts = m.timestamp
+             self.app_state.last_error = "--"
+ 
++            # Stop output se supera la soglia temperatura
++            if m.temperature_c >= self.temperature_limit and self.app_state.output_on:
++                self.stop_output()
++                QMessageBox.warning(self, "Temperatura Superata", f"Temperatura {m.temperature_c:.1f}°C >= soglia {self.temperature_limit:.1f}°C. Output spento automaticamente.")
++
+             self.cards_panel.update_measurement(m, self.output_panel.vset_spin.value(), self.output_panel.iset_spin.value())
+             self.graph_panel.add_measurement(m)
+             self._maybe_append_log_sample(m)
+             self._refresh_status_summary()
+-
+-            if self.log_table_dialog is not None and self.log_table_dialog.isVisible() and self.app_state.logging_on:
+-                self.log_table_dialog.set_samples(self.log_samples)
+         except Exception as exc:
+             self._handle_communication_error(f"Read cycle error: {exc}")
+ 
+@@ -610,28 +636,37 @@ class MainWindow(QMainWindow):
+         self.log_samples.clear()
+         self.datalogger_panel.update_stats(0, 0, None)
+         self.datalogger_panel.set_samples(self.log_samples)
+-        if self.log_table_dialog is not None and self.log_table_dialog.isVisible():
+-            self.log_table_dialog.set_samples(self.log_samples)
++        if self.log_table_dock is not None and self.log_table_dock.isVisible():
++            self.log_table_dock.set_samples(self.log_samples)
+         self._status("Log samples cleared.")
+ 
+     def show_log_table(self) -> None:
+-        if self.log_table_dialog is None:
+-            self.log_table_dialog = LogTableDialog(self)
+-            self.log_table_dialog.export_requested.connect(self.export_log_csv)
+-            self.log_table_dialog.clear_requested.connect(self._clear_log_from_dialog)
+-
+-        self.log_table_dialog.set_samples(self.log_samples)
+-        self.log_table_dialog.show()
+-        self.log_table_dialog.raise_()
+-        self.log_table_dialog.activateWindow()
+-
+-    def _clear_log_from_dialog(self) -> None:
++        self._status("DEBUG: apertura log table dock richiesta")
++        if self.log_table_dock is None:
++            self.log_table_dock = LogTableDockWidget(self)
++            self.log_table_dock.export_requested.connect(self.export_log_csv)
++            self.log_table_dock.clear_requested.connect(self._clear_log_from_dock)
++            self.log_table_dock.close_requested.connect(self._on_log_dock_closed)
++            self.addDockWidget(Qt.RightDockWidgetArea, self.log_table_dock)
++
++        self.log_table_dock.set_samples(self.log_samples)
++        self.log_table_dock.setVisible(True)
++        self.log_table_dock.raise_()
++        self.log_table_dock.activateWindow()
++
++    def _on_log_dock_closed(self) -> None:
++        if self.log_table_dock is not None:
++            self.log_table_dock.setVisible(False)
++
++    def _clear_log_from_dock(self) -> None:
+         if not self.log_samples:
+             return
+         if QMessageBox.question(self, "Clear log", "Clear all samples from the log table?") != QMessageBox.Yes:
+             return
+         self.clear_log(confirm=False)
+ 
++    # Removed: _clear_log_from_dialog (replaced by _clear_log_from_dock)
++
+     def export_log_csv(self) -> None:
+         if not self.log_samples:
+             QMessageBox.information(self, "No data", "No samples available for CSV export.")
+@@ -673,39 +708,34 @@ class MainWindow(QMainWindow):
+         logging_on = self.app_state.logging_on
+ 
+         if state == UiState.DISCONNECTED:
+-            self.connection_panel.connect_btn.setEnabled(True)
+-            self.connection_panel.disconnect_btn.setEnabled(False)
++            self.connection_panel.conn_btn.setEnabled(True)
+             self.connection_panel.set_connection_state("Disconnected", "#ef4444")
+             self.output_panel.toggle_btn.setEnabled(False)
+             self.output_panel.set_output_state(False)
+             self.datalogger_panel.start_btn.setEnabled(False)
+             self.datalogger_panel.stop_btn.setEnabled(False)
+         elif state == UiState.CONNECTING:
+-            self.connection_panel.connect_btn.setEnabled(False)
+-            self.connection_panel.disconnect_btn.setEnabled(False)
++            self.connection_panel.conn_btn.setEnabled(False)
+             self.connection_panel.set_connection_state("Connecting...", "#eab308")
+             self.output_panel.toggle_btn.setEnabled(False)
+             self.datalogger_panel.start_btn.setEnabled(False)
+             self.datalogger_panel.stop_btn.setEnabled(False)
+         elif state == UiState.CONNECTED_OUTPUT_OFF:
+-            self.connection_panel.connect_btn.setEnabled(False)
+-            self.connection_panel.disconnect_btn.setEnabled(True)
++            self.connection_panel.conn_btn.setEnabled(True)
+             self.connection_panel.set_connection_state("Connected", "#22c55e")
+             self.output_panel.toggle_btn.setEnabled(True)
+             self.output_panel.set_output_state(False)
+             self.datalogger_panel.start_btn.setEnabled(not logging_on)
+             self.datalogger_panel.stop_btn.setEnabled(logging_on)
+         elif state == UiState.CONNECTED_OUTPUT_ON:
+-            self.connection_panel.connect_btn.setEnabled(False)
+-            self.connection_panel.disconnect_btn.setEnabled(True)
++            self.connection_panel.conn_btn.setEnabled(True)
+             self.connection_panel.set_connection_state("Connected", "#22c55e")
+             self.output_panel.toggle_btn.setEnabled(True)
+             self.output_panel.set_output_state(True)
+             self.datalogger_panel.start_btn.setEnabled(not logging_on)
+             self.datalogger_panel.stop_btn.setEnabled(logging_on)
+         elif state == UiState.COMMUNICATION_ERROR:
+-            self.connection_panel.connect_btn.setEnabled(not connected)
+-            self.connection_panel.disconnect_btn.setEnabled(connected)
++            self.connection_panel.conn_btn.setEnabled(True)
+             self.connection_panel.set_connection_state("Communication error", "#f97316")
+             self.output_panel.toggle_btn.setEnabled(False)
+             self.datalogger_panel.start_btn.setEnabled(False)
+@@ -762,4 +792,7 @@ def main() -> int:
+     app.setFont(QFont("Segoe UI", 10))
+     win = MainWindow()
+     win.show()
++    # Shortcut per View Log Table (Ctrl+L)
++    from PySide6.QtGui import QKeySequence, QShortcut
++    QShortcut(QKeySequence("Ctrl+L"), win, win.show_log_table)
+     return app.exec()
+diff --git a/ips3608_app/memory_presets.py b/ips3608_app/memory_presets.py
+index 2cd30d8..94e1e79 100644
+--- a/ips3608_app/memory_presets.py
++++ b/ips3608_app/memory_presets.py
+@@ -31,6 +31,7 @@ class MemoryRepository:
+     def __init__(self, file_path: Path):
+         self.file_path = file_path
+ 
++
+     def load_all(self) -> list[MemoryPreset]:
+         presets = [MemoryPreset(slot_id=slot) for slot in DEFAULT_SLOT_IDS]
+         if not self.file_path.exists():
+@@ -41,8 +42,18 @@ class MemoryRepository:
+         except Exception:
+             return presets
+ 
++        # Migrazione automatica: se è una lista, convertila in oggetto versionato
++        if isinstance(raw, list):
++            # Backup vecchio formato
++            backup_path = self.file_path.parent / f"../backup/v1/{self.file_path.stem}_legacy_{__import__('time').strftime('%Y%m%d')}.json"
++            backup_path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
++            raw = {"version": 2, "presets": raw}
++            # Aggiorna file
++            self.file_path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
++
++        items = raw.get("presets", [])
+         by_slot = {p.slot_id: p for p in presets}
+-        for item in raw:
++        for item in items:
+             slot_id = str(item.get("slot_id", "")).strip().upper()
+             if slot_id in by_slot:
+                 preset = by_slot[slot_id]
+@@ -53,7 +64,15 @@ class MemoryRepository:
+         return presets
+ 
+     def save_all(self, presets: list[MemoryPreset]) -> None:
+-        self.file_path.write_text(json.dumps([asdict(p) for p in presets], indent=2), encoding="utf-8")
++        # Backup prima di ogni salvataggio
++        backup_path = self.file_path.parent / f"../backup/v1/{self.file_path.stem}_{__import__('time').strftime('%Y%m%d')}.json"
++        if self.file_path.exists():
++            backup_path.write_text(self.file_path.read_text(encoding="utf-8"), encoding="utf-8")
++        serializable = {
++            "version": 2,
++            "presets": [asdict(p) for p in presets]
++        }
++        self.file_path.write_text(json.dumps(serializable, indent=2), encoding="utf-8")
+ 
+ 
+ class MemoryPresetDialog(QDialog):
+diff --git a/ips3608_app/routines.py b/ips3608_app/routines.py
+index 90f3961..d420c51 100644
+--- a/ips3608_app/routines.py
++++ b/ips3608_app/routines.py
+@@ -17,8 +17,17 @@ class RoutineRepository:
+         if not self.file_path.exists():
+             return []
+         raw = json.loads(self.file_path.read_text(encoding="utf-8"))
++        # Migrazione automatica: se è una lista, convertila in oggetto versionato
++        if isinstance(raw, list):
++            # Backup vecchio formato
++            backup_path = self.file_path.parent / f"../backup/v1/{self.file_path.stem}_legacy_{time.strftime('%Y%m%d')}.json"
++            backup_path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
++            raw = {"version": 2, "routines": raw}
++            # Aggiorna file
++            self.file_path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
++        routines = raw.get("routines", [])
+         out: list[RoutineDefinition] = []
+-        for item in raw:
++        for item in routines:
+             steps = [RoutineStep(**step) for step in item.get("steps", [])]
+             out.append(
+                 RoutineDefinition(
+@@ -31,7 +40,14 @@ class RoutineRepository:
+         return out
+ 
+     def save_all(self, routines: list[RoutineDefinition]) -> None:
+-        serializable = [asdict(r) for r in routines]
++        # Backup prima di ogni salvataggio
++        backup_path = self.file_path.parent / f"../backup/v1/{self.file_path.stem}_{time.strftime('%Y%m%d')}.json"
++        if self.file_path.exists():
++            backup_path.write_text(self.file_path.read_text(encoding="utf-8"), encoding="utf-8")
++        serializable = {
++            "version": 2,
++            "routines": [asdict(r) for r in routines]
++        }
+         self.file_path.write_text(json.dumps(serializable, indent=2), encoding="utf-8")
+ 
+ 
+diff --git a/ips3608_app/ui_panels.py b/ips3608_app/ui_panels.py
+index 110001a..52599d5 100644
+--- a/ips3608_app/ui_panels.py
++++ b/ips3608_app/ui_panels.py
+@@ -36,10 +36,10 @@ class ConnectionPanel(QGroupBox):
+ 
+     def __init__(self):
+         super().__init__("Connection")
++
+         self.port_combo = QComboBox()
+         self.refresh_btn = QPushButton("Refresh")
+-        self.connect_btn = QPushButton("Connect")
+-        self.disconnect_btn = QPushButton("Disconnect")
++        self.conn_btn = QPushButton("Connect")
+         self.status_dot = QLabel("●")
+         self.status_label = QLabel("Disconnected")
+ 
+@@ -47,8 +47,7 @@ class ConnectionPanel(QGroupBox):
+         row.addWidget(QLabel("Port:"))
+         row.addWidget(self.port_combo, stretch=1)
+         row.addWidget(self.refresh_btn)
+-        row.addWidget(self.connect_btn)
+-        row.addWidget(self.disconnect_btn)
++        row.addWidget(self.conn_btn)
+ 
+         st = QHBoxLayout()
+         st.addWidget(QLabel("Status:"))
+@@ -62,8 +61,40 @@ class ConnectionPanel(QGroupBox):
+         self.status_dot.setStyleSheet("color: #ef4444; font-size: 18px;")
+ 
+         self.refresh_btn.clicked.connect(self.refresh_ports_requested.emit)
+-        self.connect_btn.clicked.connect(lambda: self.connect_requested.emit(self.port_combo.currentText().strip()))
+-        self.disconnect_btn.clicked.connect(self.disconnect_requested.emit)
++        self.conn_btn.clicked.connect(self._on_conn_btn)
++
++        self._connected = False
++
++    def _on_conn_btn(self):
++        if not self._connected:
++            self.connect_requested.emit(self.port_combo.currentText().strip())
++        else:
++            self.disconnect_requested.emit()
++
++    def set_connection_state(self, text: str, color: str):
++        self.status_label.setText(text)
++        self.status_dot.setStyleSheet(f"color: {color}; font-size: 18px;")
++        # Stato bottone
++        if text.lower().startswith("connected"):
++            self.conn_btn.setText("Disconnect")
++            self._connected = True
++            self.conn_btn.setStyleSheet("font-weight: 700; background-color: #dcfce7; color: #166534; border: 1px solid #86efac;")
++        elif text.lower().startswith("disconnected"):
++            self.conn_btn.setText("Connect")
++            self._connected = False
++            self.conn_btn.setStyleSheet("font-weight: 700; background-color: #fee2e2; color: #991b1b; border: 1px solid #fca5a5;")
++        elif text.lower().startswith("connecting"):
++            self.conn_btn.setText("Connect")
++            self._connected = False
++            self.conn_btn.setStyleSheet("font-weight: 700; background-color: #fef9c3; color: #a16207; border: 1px solid #fde047;")
++        elif text.lower().startswith("communication error"):
++            self.conn_btn.setText("Connect")
++            self._connected = False
++            self.conn_btn.setStyleSheet("font-weight: 700; background-color: #fed7aa; color: #b45309; border: 1px solid #fb923c;")
++        else:
++            self.conn_btn.setText("Connect")
++            self._connected = False
++            self.conn_btn.setStyleSheet("")
+ 
+     def set_ports(self, ports: list[str], include_simulated: bool) -> None:
+         current = self.port_combo.currentText()
+@@ -85,6 +116,7 @@ class ConnectionPanel(QGroupBox):
+ 
+ 
+ class OutputControlPanel(QGroupBox):
++    temperature_limit_changed = Signal(float)
+     start_output_requested = Signal()
+     stop_output_requested = Signal()
+     voltage_changed = Signal(float)
+@@ -110,6 +142,13 @@ class OutputControlPanel(QGroupBox):
+         self.iset_spin.setValue(1.500)
+         self.iset_spin.setSuffix(" A")
+ 
++        self.temp_limit_spin = QDoubleSpinBox()
++        self.temp_limit_spin.setRange(0.0, 100.0)
++        self.temp_limit_spin.setDecimals(1)
++        self.temp_limit_spin.setSingleStep(0.5)
++        self.temp_limit_spin.setValue(60.0)
++        self.temp_limit_spin.setSuffix(" °C")
++
+         top = QHBoxLayout()
+         top.addWidget(self.output_status)
+         top.addStretch(1)
+@@ -123,6 +162,9 @@ class OutputControlPanel(QGroupBox):
+         setpoint_layout.addSpacing(16)
+         setpoint_layout.addWidget(QLabel("Iset:"))
+         setpoint_layout.addWidget(self.iset_spin)
++        setpoint_layout.addSpacing(16)
++        setpoint_layout.addWidget(QLabel("Tmax:"))
++        setpoint_layout.addWidget(self.temp_limit_spin)
+         setpoint_layout.addStretch(1)
+ 
+         layout = QVBoxLayout(self)
+@@ -132,6 +174,7 @@ class OutputControlPanel(QGroupBox):
+         self.toggle_btn.clicked.connect(self._on_toggle)
+         self.vset_spin.valueChanged.connect(self.voltage_changed.emit)
+         self.iset_spin.valueChanged.connect(self.current_changed.emit)
++        self.temp_limit_spin.valueChanged.connect(self.temperature_limit_changed.emit)
+         self.set_output_state(False)
+ 
+     def _on_toggle(self) -> None:
+@@ -312,6 +355,7 @@ class GraphPanel(QGroupBox):
+ 
+ 
+ class DataloggerPanel(QGroupBox):
++    debug_log_requested = Signal()
+     start_log_requested = Signal()
+     stop_log_requested = Signal()
+     show_table_requested = Signal()
+@@ -332,27 +376,12 @@ class DataloggerPanel(QGroupBox):
+         self.stop_btn = QPushButton("STOP LOG")
+         self.table_btn = QPushButton("View Log Table")
+         self.export_btn = QPushButton("Export CSV")
++        self.debug_btn = QPushButton("DEBUG LOG ENTRY")
+ 
+         self.samples_lbl = QLabel("Samples: 0")
+         self.duration_lbl = QLabel("Duration: 00:00:00")
+         self.last_lbl = QLabel("Last sample: --")
+ 
+-        self.table = QTableWidget(0, 5)
+-        self.table.setHorizontalHeaderLabels([
+-            "Time",
+-            "Voltage V",
+-            "Current A",
+-            "Power W",
+-            "Temperature C",
+-        ])
+-        self.table.setMaximumHeight(200)
+-        self.table.setAlternatingRowColors(True)
+-        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
+-        self.table.setSelectionMode(QTableWidget.SingleSelection)
+-        self.table.verticalHeader().setVisible(False)
+-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+-        self.table.horizontalHeader().setStretchLastSection(True)
+ 
+         head = QHBoxLayout()
+         head.addWidget(QLabel("Datalogger:"))
+@@ -368,6 +397,7 @@ class DataloggerPanel(QGroupBox):
+         controls.addWidget(self.stop_btn)
+         controls.addWidget(self.table_btn)
+         controls.addWidget(self.export_btn)
++        controls.addWidget(self.debug_btn)
+         controls.addStretch(1)
+ 
+         stats = QHBoxLayout()
+@@ -382,12 +412,12 @@ class DataloggerPanel(QGroupBox):
+         layout.addLayout(head)
+         layout.addLayout(controls)
+         layout.addLayout(stats)
+-        layout.addWidget(self.table)
+ 
+         self.start_btn.clicked.connect(self.start_log_requested.emit)
+         self.stop_btn.clicked.connect(self.stop_log_requested.emit)
+         self.table_btn.clicked.connect(self.show_table_requested.emit)
+         self.export_btn.clicked.connect(self.export_csv_requested.emit)
++        self.debug_btn.clicked.connect(self.debug_log_requested.emit)
+ 
+     def interval_seconds(self) -> int:
+         mapping = {"1 s": 1, "5 s": 5, "10 s": 10, "30 s": 30, "60 s": 60}

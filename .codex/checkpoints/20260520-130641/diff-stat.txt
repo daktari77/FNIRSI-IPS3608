@@ -1,0 +1,5 @@
+ ips3608_app/main_window.py    | 91 +++++++++++++++++++++++++++++--------------
+ ips3608_app/memory_presets.py | 23 ++++++++++-
+ ips3608_app/routines.py       | 20 +++++++++-
+ ips3608_app/ui_panels.py      | 76 +++++++++++++++++++++++++-----------
+ 4 files changed, 154 insertions(+), 56 deletions(-)

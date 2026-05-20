@@ -1,208 +1,32 @@
 from __future__ import annotations
 
-import time
 from collections import deque
 from datetime import datetime
 from typing import Optional
 
 import pyqtgraph as pg
-from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
+from PySide6.QtCore import QTimer, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QComboBox,
+    QDialog,
     QDoubleSpinBox,
+    QFormLayout,
     QFrame,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
     QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
 from .models import LogSample, Measurement
-
-_DIGIT_FONT = "DSEG7 Classic"
-
-
-class Sparkline(QWidget):
-    """Lightweight single-line trend chart drawn with QPainter."""
-
-    def __init__(self, color: str, parent: Optional[QWidget] = None):
-        super().__init__(parent)
-        self._data: deque[float] = deque(maxlen=60)
-        self._color = QColor(color)
-        self.setFixedHeight(28)
-        self.setAttribute(Qt.WA_TransparentForMouseEvents)
-
-    def append(self, value: float) -> None:
-        self._data.append(value)
-        self.update()
-
-    def clear(self) -> None:
-        self._data.clear()
-        self.update()
-
-    def paintEvent(self, event) -> None:
-        if len(self._data) < 2:
-            return
-        data = list(self._data)
-        lo, hi = min(data), max(data)
-        span = hi - lo or 1.0
-        w, h = self.width(), self.height()
-        path = QPainterPath()
-        n = len(data)
-        for i, v in enumerate(data):
-            x = i / (n - 1) * w
-            y = h - (v - lo) / span * (h - 4) - 2
-            if i == 0:
-                path.moveTo(x, y)
-            else:
-                path.lineTo(x, y)
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        painter.setPen(QPen(self._color, 1.5))
-        painter.drawPath(path)
-
-
-class MetricCard(QFrame):
-    """Realtime metric display with large digit value, delta vs setpoint, and sparkline."""
-
-    def __init__(self, title: str, unit: str, color: str, decimals: int = 2, show_fan: bool = False):
-        super().__init__()
-        self.setObjectName("MetricCard")
-        self._unit = unit
-        self._color = color
-        self._decimals = decimals
-        self._fmt = f"{{:.{decimals}f}}"
-        self._show_fan = show_fan
-
-        self.title_lbl = QLabel(title)
-        self.title_lbl.setStyleSheet("color: #4A5A6A; font-size: 11px; font-weight: 600; letter-spacing: 1px;")
-
-        title_row = QHBoxLayout()
-        title_row.setContentsMargins(0, 0, 0, 0)
-        title_row.addWidget(self.title_lbl, stretch=1)
-        if show_fan:
-            self.fan_lbl = QLabel("◌ FAN")
-            self.fan_lbl.setStyleSheet("color: #4A5A6A; font-size: 11px;")
-            self.fan_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            title_row.addWidget(self.fan_lbl)
-
-        self.value_lbl = QLabel(self._fmt.format(0.0))
-        self.value_lbl.setFont(QFont(_DIGIT_FONT, 42))
-        self.value_lbl.setStyleSheet(f"color: {color};")
-
-        self.unit_lbl = QLabel(unit)
-        self.unit_lbl.setStyleSheet(f"color: {color}; font-size: 16px; font-weight: 600;")
-        self.unit_lbl.setAlignment(Qt.AlignBottom)
-
-        self.setpoint_lbl = QLabel("")
-        self.setpoint_lbl.setStyleSheet("color: #4A5A6A; font-size: 11px;")
-
-        self.delta_lbl = QLabel("")
-        self.delta_lbl.setStyleSheet("color: #4A5A6A; font-size: 11px;")
-        self.delta_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-
-        self.sparkline = Sparkline(color, self)
-
-        value_row = QHBoxLayout()
-        value_row.setSpacing(4)
-        value_row.addWidget(self.value_lbl, stretch=1)
-        value_row.addWidget(self.unit_lbl)
-
-        info_row = QHBoxLayout()
-        info_row.addWidget(self.setpoint_lbl, stretch=1)
-        info_row.addWidget(self.delta_lbl)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 8, 10, 8)
-        layout.setSpacing(2)
-        layout.addLayout(title_row)
-        layout.addLayout(value_row)
-        layout.addLayout(info_row)
-        layout.addWidget(self.sparkline)
-
-    def set_value(
-        self,
-        value: float,
-        setpoint: Optional[float] = None,
-        sub_text: str = "",
-        fan_on: Optional[bool] = None,
-    ) -> None:
-        self.value_lbl.setText(self._fmt.format(value))
-        self.sparkline.append(value)
-
-        if setpoint is not None:
-            self.setpoint_lbl.setText(f"Set {self._fmt.format(setpoint)} {self._unit}")
-            delta = value - setpoint
-            sign = "+" if delta >= 0 else ""
-            self.delta_lbl.setText(f"Δ {sign}{self._fmt.format(delta)}")
-            threshold = max(abs(setpoint) * 0.05, 10 ** -self._decimals)
-            ok = abs(delta) <= threshold
-            delta_color = "#16A34A" if ok else "#DC2626"
-            self.delta_lbl.setStyleSheet(f"color: {delta_color}; font-size: 11px;")
-        elif sub_text:
-            self.setpoint_lbl.setText(sub_text)
-            self.delta_lbl.setText("")
-
-        if self._show_fan and fan_on is not None and hasattr(self, "fan_lbl"):
-            if fan_on:
-                self.fan_lbl.setText("⊙ FAN")
-                self.fan_lbl.setStyleSheet("color: #0B84F3; font-size: 11px; font-weight: 700;")
-            else:
-                self.fan_lbl.setText("◌ FAN")
-                self.fan_lbl.setStyleSheet("color: #4A5A6A; font-size: 11px;")
-
-
-_TEMP_EMA_ALPHA = 0.25   # smoothing factor: lower = smoother, higher = more reactive
-_TEMP_DISPLAY_INTERVAL_S = 1.0   # temperature display refresh rate
-
-
-class RealtimeCardsPanel(QGroupBox):
-    def __init__(self):
-        super().__init__("Realtime Readings")
-        self.max_temp = 0.0
-        self._temp_ema: float = 0.0
-        self._temp_ema_init: bool = False
-        self._last_temp_display_mono: float = 0.0
-
-        self.volt_card = MetricCard("VOLTAGE", "V", "#0B84F3", decimals=2)
-        self.curr_card = MetricCard("CURRENT", "A", "#00A86B", decimals=3)
-        self.temp_card = MetricCard("TEMPERATURE", "°C", "#EF4444", decimals=1, show_fan=True)
-        self.pow_card = MetricCard("POWER", "W", "#F59E0B", decimals=3)
-
-        grid = QGridLayout(self)
-        grid.setSpacing(8)
-        grid.addWidget(self.volt_card, 0, 0)
-        grid.addWidget(self.curr_card, 0, 1)
-        grid.addWidget(self.temp_card, 1, 0)
-        grid.addWidget(self.pow_card, 1, 1)
-
-    def update_measurement(self, m: Measurement, vset: float, iset: float, fan_on: bool = False) -> None:
-        # V, I, P update every measurement cycle
-        self.volt_card.set_value(m.voltage_v, setpoint=vset)
-        self.curr_card.set_value(m.current_a, setpoint=iset)
-        self.pow_card.set_value(m.power_w, sub_text=f"{m.voltage_v:.2f} V × {m.current_a:.3f} A")
-
-        # Temperature: EMA smoothing + 1 Hz display rate to avoid digit bounce
-        if not self._temp_ema_init:
-            self._temp_ema = m.temperature_c
-            self._temp_ema_init = True
-        else:
-            self._temp_ema = _TEMP_EMA_ALPHA * m.temperature_c + (1.0 - _TEMP_EMA_ALPHA) * self._temp_ema
-
-        self.max_temp = max(self.max_temp, self._temp_ema)
-        now = time.monotonic()
-        if now - self._last_temp_display_mono >= _TEMP_DISPLAY_INTERVAL_S:
-            self._last_temp_display_mono = now
-            self.temp_card.set_value(
-                self._temp_ema,
-                sub_text=f"Max {self.max_temp:.1f} °C",
-                fan_on=fan_on,
-            )
 
 
 class ConnectionPanel(QGroupBox):
@@ -234,22 +58,23 @@ class ConnectionPanel(QGroupBox):
         layout = QVBoxLayout(self)
         layout.addLayout(row)
         layout.addLayout(st)
-        self.status_dot.setStyleSheet("color: #DC2626; font-size: 18px;")
+        self.status_dot.setStyleSheet("color: #ef4444; font-size: 18px;")
 
         self.refresh_btn.clicked.connect(self.refresh_ports_requested.emit)
         self.conn_btn.clicked.connect(self._on_conn_btn)
 
         self._connected = False
 
-    def _on_conn_btn(self) -> None:
+    def _on_conn_btn(self):
         if not self._connected:
             self.connect_requested.emit(self.port_combo.currentText().strip())
         else:
             self.disconnect_requested.emit()
 
-    def set_connection_state(self, text: str, color: str) -> None:
+    def set_connection_state(self, text: str, color: str):
         self.status_label.setText(text)
         self.status_dot.setStyleSheet(f"color: {color}; font-size: 18px;")
+        # Stato bottone
         if text.lower().startswith("connected"):
             self.conn_btn.setText("Disconnect")
             self._connected = True
@@ -285,6 +110,10 @@ class ConnectionPanel(QGroupBox):
             self.port_combo.setCurrentIndex(idx)
         self.port_combo.blockSignals(False)
 
+    def set_connection_state(self, text: str, color: str) -> None:
+        self.status_label.setText(text)
+        self.status_dot.setStyleSheet(f"color: {color}; font-size: 18px;")
+
 
 class OutputControlPanel(QGroupBox):
     temperature_limit_changed = Signal(float)
@@ -296,11 +125,8 @@ class OutputControlPanel(QGroupBox):
     def __init__(self):
         super().__init__("Output Control")
         self.output_status = QLabel("Output OFF")
-        self.output_status.setStyleSheet("font-size: 13px; font-weight: 700;")
-
-        self.toggle_btn = QPushButton("▶  START OUTPUT")
-        self.toggle_btn.setMinimumHeight(56)
-        self.toggle_btn.setFont(QFont("Segoe UI", 12, QFont.Bold))
+        self.toggle_btn = QPushButton("START OUTPUT")
+        self.toggle_btn.setMinimumHeight(40)
 
         self.vset_spin = QDoubleSpinBox()
         self.vset_spin.setRange(0.0, 36.0)
@@ -352,7 +178,7 @@ class OutputControlPanel(QGroupBox):
         self.set_output_state(False)
 
     def _on_toggle(self) -> None:
-        if "START" in self.toggle_btn.text():
+        if self.toggle_btn.text().startswith("START"):
             self.start_output_requested.emit()
         else:
             self.stop_output_requested.emit()
@@ -360,22 +186,58 @@ class OutputControlPanel(QGroupBox):
     def set_output_state(self, on: bool) -> None:
         if on:
             self.output_status.setText("Output ON")
-            self.output_status.setStyleSheet("color: #16A34A; font-size: 13px; font-weight: 700;")
-            self.toggle_btn.setText("■  STOP OUTPUT")
-            self.toggle_btn.setStyleSheet(
-                "font-weight: 700; font-size: 13px;"
-                "background-color: #DC2626; color: #FFFFFF;"
-                "border: none; border-radius: 8px;"
-            )
+            self.output_status.setStyleSheet("color: #166534; font-weight: 700;")
+            self.toggle_btn.setText("STOP OUTPUT")
+            self.toggle_btn.setStyleSheet("font-weight: 700; background-color: #fee2e2; color: #991b1b; border: 1px solid #fca5a5;")
         else:
             self.output_status.setText("Output OFF")
-            self.output_status.setStyleSheet("color: #DC2626; font-size: 13px; font-weight: 700;")
-            self.toggle_btn.setText("▶  START OUTPUT")
-            self.toggle_btn.setStyleSheet(
-                "font-weight: 700; font-size: 13px;"
-                "background-color: #16A34A; color: #FFFFFF;"
-                "border: none; border-radius: 8px;"
-            )
+            self.output_status.setStyleSheet("color: #b91c1c; font-weight: 700;")
+            self.toggle_btn.setText("START OUTPUT")
+            self.toggle_btn.setStyleSheet("font-weight: 700; background-color: #dcfce7; color: #166534; border: 1px solid #86efac;")
+
+
+class MetricCard(QFrame):
+    def __init__(self, title: str, value: str, sub: str, color: str):
+        super().__init__()
+        self.setObjectName("MetricCard")
+        self.title_lbl = QLabel(title)
+        self.value_lbl = QLabel(value)
+        self.sub_lbl = QLabel(sub)
+
+        self.title_lbl.setStyleSheet("color: #6b7280; font-size: 12px; font-weight: 600;")
+        self.value_lbl.setStyleSheet(f"color: {color}; font-size: 34px; font-weight: 800;")
+        self.sub_lbl.setStyleSheet("color: #4b5563; font-size: 12px;")
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.title_lbl)
+        layout.addWidget(self.value_lbl)
+        layout.addWidget(self.sub_lbl)
+
+
+class RealtimeCardsPanel(QGroupBox):
+    def __init__(self):
+        super().__init__("Realtime Readings")
+        self.max_temp = 0.0
+        self.volt_card = MetricCard("VOLTAGE", "0.00 V", "Set: 0.00 V", "#60a5fa")
+        self.curr_card = MetricCard("CURRENT", "0.000 A", "Set: 0.000 A", "#34d399")
+        self.temp_card = MetricCard("TEMPERATURE", "0.0 C", "Max: 0.0 C", "#f59e0b")
+        self.pow_card = MetricCard("POWER", "0.000 W", "V x I", "#f472b6")
+
+        grid = QGridLayout(self)
+        grid.addWidget(self.volt_card, 0, 0)
+        grid.addWidget(self.curr_card, 0, 1)
+        grid.addWidget(self.temp_card, 1, 0)
+        grid.addWidget(self.pow_card, 1, 1)
+
+    def update_measurement(self, m: Measurement, vset: float, iset: float) -> None:
+        self.max_temp = max(self.max_temp, m.temperature_c)
+        self.volt_card.value_lbl.setText(f"{m.voltage_v:.2f} V")
+        self.volt_card.sub_lbl.setText(f"Set: {vset:.2f} V")
+        self.curr_card.value_lbl.setText(f"{m.current_a:.3f} A")
+        self.curr_card.sub_lbl.setText(f"Set: {iset:.3f} A")
+        self.temp_card.value_lbl.setText(f"{m.temperature_c:.1f} C")
+        self.temp_card.sub_lbl.setText(f"Max: {self.max_temp:.1f} C")
+        self.pow_card.value_lbl.setText(f"{m.power_w:.3f} W")
 
 
 class GraphPanel(QGroupBox):
@@ -401,15 +263,14 @@ class GraphPanel(QGroupBox):
         self.update_combo.setCurrentText("500 ms")
 
         self.plot_main = pg.PlotWidget(title="V / I vs Time")
-        self.plot_main.setBackground("#FFFFFF")
-        self.plot_main.showGrid(x=True, y=True, alpha=0.2)
+        self.plot_main.showGrid(x=True, y=True, alpha=0.25)
         self.plot_main.setLabel("bottom", "Time", units="s")
         self.plot_main.setLabel("left", "Value")
         self.plot_main.addLegend()
         self.plot_main.setYRange(0.0, 40.0, padding=0.0)
 
-        self.curve_v = self.plot_main.plot([], [], pen=pg.mkPen(QColor("#0B84F3"), width=2), name="Voltage (V)")
-        self.curve_i = self.plot_main.plot([], [], pen=pg.mkPen(QColor("#00A86B"), width=2), name="Current (A)")
+        self.curve_v = self.plot_main.plot([], [], pen=pg.mkPen(QColor("#60a5fa"), width=2), name="Voltage (V)")
+        self.curve_i = self.plot_main.plot([], [], pen=pg.mkPen(QColor("#34d399"), width=2), name="Current (A)")
 
         controls = QHBoxLayout()
         controls.addWidget(self.pause_btn)
@@ -494,6 +355,7 @@ class GraphPanel(QGroupBox):
 
 
 class DataloggerPanel(QGroupBox):
+    debug_log_requested = Signal()
     start_log_requested = Signal()
     stop_log_requested = Signal()
     show_table_requested = Signal()
@@ -504,10 +366,7 @@ class DataloggerPanel(QGroupBox):
         self.status_dot = QLabel("●")
         self.status_label = QLabel("OFF")
         self.running_banner = QLabel("DATALOGGING IN CORSO")
-        self.running_banner.setStyleSheet(
-            "color: #14532d; background: #dcfce7; padding: 4px 8px;"
-            "border-radius: 6px; border: 1px solid #86efac;"
-        )
+        self.running_banner.setStyleSheet("color: #14532d; background: #dcfce7; padding: 4px 8px; border-radius: 6px; border: 1px solid #86efac;")
         self.running_banner.setVisible(False)
 
         self.interval_combo = QComboBox()
@@ -517,10 +376,12 @@ class DataloggerPanel(QGroupBox):
         self.stop_btn = QPushButton("STOP LOG")
         self.table_btn = QPushButton("View Log Table")
         self.export_btn = QPushButton("Export CSV")
+        self.debug_btn = QPushButton("DEBUG LOG ENTRY")
 
         self.samples_lbl = QLabel("Samples: 0")
         self.duration_lbl = QLabel("Duration: 00:00:00")
         self.last_lbl = QLabel("Last sample: --")
+
 
         head = QHBoxLayout()
         head.addWidget(QLabel("Datalogger:"))
@@ -536,6 +397,7 @@ class DataloggerPanel(QGroupBox):
         controls.addWidget(self.stop_btn)
         controls.addWidget(self.table_btn)
         controls.addWidget(self.export_btn)
+        controls.addWidget(self.debug_btn)
         controls.addStretch(1)
 
         stats = QHBoxLayout()
@@ -555,6 +417,7 @@ class DataloggerPanel(QGroupBox):
         self.stop_btn.clicked.connect(self.stop_log_requested.emit)
         self.table_btn.clicked.connect(self.show_table_requested.emit)
         self.export_btn.clicked.connect(self.export_csv_requested.emit)
+        self.debug_btn.clicked.connect(self.debug_log_requested.emit)
 
     def interval_seconds(self) -> int:
         mapping = {"1 s": 1, "5 s": 5, "10 s": 10, "30 s": 30, "60 s": 60}
@@ -563,11 +426,11 @@ class DataloggerPanel(QGroupBox):
     def set_logging_state(self, on: bool) -> None:
         if on:
             self.status_label.setText("IN CORSO")
-            self.status_dot.setStyleSheet("color: #16A34A; font-size: 18px;")
+            self.status_dot.setStyleSheet("color: #16a34a; font-size: 18px;")
             self.running_banner.setVisible(True)
         else:
             self.status_label.setText("OFF")
-            self.status_dot.setStyleSheet("color: #DC2626; font-size: 18px;")
+            self.status_dot.setStyleSheet("color: #dc2626; font-size: 18px;")
             self.running_banner.setVisible(False)
 
     def update_stats(self, samples: int, duration_sec: int, last_sample: Optional[datetime]) -> None:
@@ -582,11 +445,63 @@ class DataloggerPanel(QGroupBox):
             self.last_lbl.setText(f"Last sample: {last_sample.strftime('%Y-%m-%d %H:%M:%S')}")
 
     def set_samples(self, samples: list[LogSample]) -> None:
-        self.samples_lbl.setText(f"Samples: {len(samples)}")
-        if samples:
-            self.last_lbl.setText(f"Last sample: {samples[-1].timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
-        else:
-            self.last_lbl.setText("Last sample: --")
+        self.table.setRowCount(len(samples))
+        for row, sample in enumerate(samples):
+            self.table.setItem(row, 0, QTableWidgetItem(sample.timestamp.strftime("%Y-%m-%d %H:%M:%S")))
+            self.table.setItem(row, 1, QTableWidgetItem(f"{sample.voltage_v:.2f}"))
+            self.table.setItem(row, 2, QTableWidgetItem(f"{sample.current_a:.3f}"))
+            self.table.setItem(row, 3, QTableWidgetItem(f"{sample.power_w:.3f}"))
+            self.table.setItem(row, 4, QTableWidgetItem(f"{sample.temperature_c:.1f}"))
+        self.table.resizeColumnsToContents()
+        self.table.scrollToBottom()
+
+
+class LogTableDialog(QDialog):
+    export_requested = Signal()
+    clear_requested = Signal()
+
+    def __init__(self, parent: QWidget):
+        super().__init__(parent)
+        self.setWindowTitle("Log Samples")
+        self.resize(760, 420)
+
+        self.table = QTableWidget(0, 5)
+        self.table.setHorizontalHeaderLabels([
+            "Time",
+            "Voltage V",
+            "Current A",
+            "Power W",
+            "Temperature C",
+        ])
+
+        self.export_btn = QPushButton("Export CSV")
+        self.clear_btn = QPushButton("Clear Log")
+        self.close_btn = QPushButton("Close")
+
+        controls = QHBoxLayout()
+        controls.addWidget(self.export_btn)
+        controls.addWidget(self.clear_btn)
+        controls.addStretch(1)
+        controls.addWidget(self.close_btn)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.table)
+        layout.addLayout(controls)
+
+        self.export_btn.clicked.connect(self.export_requested.emit)
+        self.clear_btn.clicked.connect(self.clear_requested.emit)
+        self.close_btn.clicked.connect(self.close)
+
+    def set_samples(self, samples: list[LogSample]) -> None:
+        self.table.setRowCount(len(samples))
+        for row, sample in enumerate(samples):
+            self.table.setItem(row, 0, QTableWidgetItem(sample.timestamp.strftime("%Y-%m-%d %H:%M:%S")))
+            self.table.setItem(row, 1, QTableWidgetItem(f"{sample.voltage_v:.2f}"))
+            self.table.setItem(row, 2, QTableWidgetItem(f"{sample.current_a:.3f}"))
+            self.table.setItem(row, 3, QTableWidgetItem(f"{sample.power_w:.3f}"))
+            self.table.setItem(row, 4, QTableWidgetItem(f"{sample.temperature_c:.1f}"))
+        self.table.resizeColumnsToContents()
+        self.table.scrollToBottom()
 
 
 class StatusLogPanel(QGroupBox):

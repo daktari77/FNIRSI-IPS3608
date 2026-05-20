@@ -1,0 +1,68 @@
+{
+  "format": "repo-restore-checkpoint",
+  "format_version": 1,
+  "created_at": "2026-05-20T13:06:42",
+  "repo_root": "G:\\Il mio Drive\\Sviluppo\\FNIRSI-IPS3608",
+  "head": "b462c1918f9f1537f62d42283a876f48cae90e82",
+  "branch": "feature/v2-0-0-planning",
+  "checkpoint": "G:\\Il mio Drive\\Sviluppo\\FNIRSI-IPS3608\\.codex\\checkpoints\\20260520-130641",
+  "tracked_files": [
+    {
+      "path": "ips3608_app/main_window.py",
+      "exists": true,
+      "size": 34405,
+      "sha256": "5b1d2dfee7b117547567e7d836a20a609121d87ce14171ddd9fe93f6606aa95b"
+    },
+    {
+      "path": "ips3608_app/memory_presets.py",
+      "exists": true,
+      "size": 9326,
+      "sha256": "2418ac2bffb22d61586a4d6bd222eadb2e4ed76f8b1c7702fc778acbf5355ad1"
+    },
+    {
+      "path": "ips3608_app/routines.py",
+      "exists": true,
+      "size": 3431,
+      "sha256": "7e50c625c8ff122e8ebeae26208994e80263ae0bdcad8a667a12b20b651ce094"
+    },
+    {
+      "path": "ips3608_app/ui_panels.py",
+      "exists": true,
+      "size": 21620,
+      "sha256": "d52a8117ae641b8948c8cc4a47ce346a161c4b40a02f8c6c777449338545d366"
+    }
+  ],
+  "untracked_files": [
+    {
+      "path": "backup/v1/ips3608_routines_20260520.json",
+      "exists": true,
+      "size": 560,
+      "sha256": "463c23da36855219cacf1d91097287fc35d3cf38062b39acd2f0335e2c96f750"
+    },
+    {
+      "path": "docs/V2_Migrazione_Dati.md",
+      "exists": true,
+      "size": 1259,
+      "sha256": "64df8c9492bae6019382e58a2cacc2f7769d50f3db160ef7301716ba15c90bb8"
+    },
+    {
+      "path": "ips3608_app/fnirsi_protocol.py",
+      "exists": true,
+      "size": 4242,
+      "sha256": "c7e8f18543e2111945104d35918f0ffb0f2a39077c688a6be9af57dac9c80006"
+    },
+    {
+      "path": "ips3608_app/log_table_dock.py",
+      "exists": true,
+      "size": 3114,
+      "sha256": "38fe7f0c547900c086f53c1b8af8fc91942e76bc28547ee83199fb5cf209b218"
+    },
+    {
+      "path": "memory_presets.json",
+      "exists": true,
+      "size": 841,
+      "sha256": "e459d60fb5410690f7aa6d0afb1d875c385f59fc6133739e70fbe74992031d3e"
+    }
+  ],
+  "app_backup_path": ""
+}

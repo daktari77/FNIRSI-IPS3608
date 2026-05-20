@@ -1,0 +1,9 @@
+ M ips3608_app/main_window.py
+ M ips3608_app/memory_presets.py
+ M ips3608_app/routines.py
+ M ips3608_app/ui_panels.py
+?? backup/
+?? docs/V2_Migrazione_Dati.md
+?? ips3608_app/fnirsi_protocol.py
+?? ips3608_app/log_table_dock.py
+?? memory_presets.json

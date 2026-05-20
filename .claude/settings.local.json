@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm \"g:/Il mio Drive/Sviluppo/FNIRSI-IPS3608/ips3608_app/fnirsi_protocol.py\")"
+    ],
+    "additionalDirectories": [
+      "g:\\Il mio Drive\\Sviluppo\\FNIRSI-IPS3608\\ips3608_app"
+    ]
+  }
+}

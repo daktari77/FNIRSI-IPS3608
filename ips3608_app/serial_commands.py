@@ -7,9 +7,9 @@ from dataclasses import dataclass
 # Verified protocol values from existing tools in this workspace.
 CMD_READ = 0xA1
 CMD_WRITE_BYTE = 0xB1
-CMD_CONNECT = 0xC1
+CMD_CONNECT = 0xC1  # cmd_type byte (packet[1]) — coincides numerically with REG_SET_VOLT but occupies a different packet position
 
-REG_SET_VOLT = 0xC1
+REG_SET_VOLT = 0xC1  # register byte (packet[2]) — same numeric value as CMD_CONNECT by protocol design
 REG_SET_CURR = 0xC2
 REG_LIVE = 0xC3
 REG_TEMP = 0xC4

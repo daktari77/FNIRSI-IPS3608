@@ -1,18 +1,17 @@
 from __future__ import annotations
 
 import json
-import sys
-import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog,
     QDoubleSpinBox,
     QFormLayout,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QListWidget,
     QMessageBox,
@@ -32,17 +31,6 @@ class MemoryRepository:
     def __init__(self, file_path: Path):
         self.file_path = file_path
 
-    def _backup_path(self, suffix: str = "") -> Path:
-        backup_dir = self.file_path.parent / "backup" / "v1"
-        backup_dir.mkdir(parents=True, exist_ok=True)
-        tag = f"_{suffix}" if suffix else ""
-        return backup_dir / f"{self.file_path.stem}{tag}_{time.strftime('%Y%m%d_%H%M%S')}.json"
-
-    def _write_json_atomic(self, payload: object) -> None:
-        self.file_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = self.file_path.with_suffix(f"{self.file_path.suffix}.tmp")
-        tmp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        tmp_path.replace(self.file_path)
 
     def load_all(self) -> list[MemoryPreset]:
         presets = [MemoryPreset(slot_id=slot) for slot in DEFAULT_SLOT_IDS]
@@ -51,17 +39,17 @@ class MemoryRepository:
 
         try:
             raw = json.loads(self.file_path.read_text(encoding="utf-8"))
-        except Exception as exc:
-            print(f"[MemoryRepository] Failed to load {self.file_path}: {exc}", file=sys.stderr)
+        except Exception:
             return presets
 
         # Migrazione automatica: se è una lista, convertila in oggetto versionato
         if isinstance(raw, list):
-            self._backup_path("legacy").write_text(json.dumps(raw, indent=2), encoding="utf-8")
+            # Backup vecchio formato
+            backup_path = self.file_path.parent / f"../backup/v1/{self.file_path.stem}_legacy_{__import__('time').strftime('%Y%m%d')}.json"
+            backup_path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
             raw = {"version": 2, "presets": raw}
-            self._write_json_atomic(raw)
-        if not isinstance(raw, dict):
-            return presets
+            # Aggiorna file
+            self.file_path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
 
         items = raw.get("presets", [])
         by_slot = {p.slot_id: p for p in presets}
@@ -76,39 +64,24 @@ class MemoryRepository:
         return presets
 
     def save_all(self, presets: list[MemoryPreset]) -> None:
+        # Backup prima di ogni salvataggio
+        backup_path = self.file_path.parent / f"../backup/v1/{self.file_path.stem}_{__import__('time').strftime('%Y%m%d')}.json"
         if self.file_path.exists():
-            self._backup_path().write_text(self.file_path.read_text(encoding="utf-8"), encoding="utf-8")
+            backup_path.write_text(self.file_path.read_text(encoding="utf-8"), encoding="utf-8")
         serializable = {
             "version": 2,
             "presets": [asdict(p) for p in presets]
         }
-        self._write_json_atomic(serializable)
+        self.file_path.write_text(json.dumps(serializable, indent=2), encoding="utf-8")
 
 
 class MemoryPresetDialog(QDialog):
-    """Dialog for editing memory presets M1..M6.
-
-    Signals:
-        recall_requested(voltage_v, current_a): emitted when the user clicks "Recall To Output".
-            Connect this in the caller to apply the values to the device and the UI spinboxes.
-    """
-
-    recall_requested = Signal(float, float)
-
-    def __init__(
-        self,
-        parent: QWidget,
-        presets: list[MemoryPreset],
-        current_voltage: float = 0.0,
-        current_current: float = 0.0,
-    ):
+    def __init__(self, parent: QWidget, presets: list[MemoryPreset]):
         super().__init__(parent)
         self.setWindowTitle("Memory Presets M1..M6")
         self.resize(860, 480)
         self.presets = presets
         self.selected_slot_id: Optional[str] = None
-        self._current_voltage = current_voltage
-        self._current_current = current_current
 
         self.list_widget = QListWidget()
         self.slot_lbl = QLabel("Slot: -")
@@ -164,7 +137,7 @@ class MemoryPresetDialog(QDialog):
 
     def _wire_signals(self) -> None:
         self.list_widget.currentTextChanged.connect(self._load_selected)
-        self.apply_from_current_btn.clicked.connect(self._load_from_current)
+        self.apply_from_current_btn.clicked.connect(self._load_from_parent)
         self.recall_btn.clicked.connect(self._recall_to_output)
         self.save_btn.clicked.connect(self._save_slot)
         self.clear_btn.clicked.connect(self._clear_slot)
@@ -203,16 +176,45 @@ class MemoryPresetDialog(QDialog):
         self.current_spin.setValue(preset.current_a)
         self.status_lbl.setText(f"Editing {preset.display_name}")
 
-    def _load_from_current(self) -> None:
-        self.voltage_spin.setValue(self._current_voltage)
-        self.current_spin.setValue(self._current_current)
+    def _load_from_parent(self) -> None:
+        parent = self.parent()
+        if parent is None:
+            return
+        vset = getattr(getattr(parent, "output_panel", None), "vset_spin", None)
+        iset = getattr(getattr(parent, "output_panel", None), "iset_spin", None)
+        if vset is None or iset is None:
+            return
+        self.voltage_spin.setValue(float(vset.value()))
+        self.current_spin.setValue(float(iset.value()))
         self.status_lbl.setText("Loaded current output values")
 
     def _recall_to_output(self) -> None:
         preset = self._selected_preset()
         if preset is None:
             return
-        self.recall_requested.emit(preset.voltage_v, preset.current_a)
+        parent = self.parent()
+        if parent is None:
+            return
+
+        output_panel = getattr(parent, "output_panel", None)
+        if output_panel is not None:
+            output_panel.vset_spin.blockSignals(True)
+            output_panel.iset_spin.blockSignals(True)
+            output_panel.vset_spin.setValue(preset.voltage_v)
+            output_panel.iset_spin.setValue(preset.current_a)
+            output_panel.vset_spin.blockSignals(False)
+            output_panel.iset_spin.blockSignals(False)
+
+        device_client = getattr(parent, "device_client", None)
+        app_state = getattr(parent, "app_state", None)
+        if device_client is not None and app_state is not None and getattr(app_state, "connected", False):
+            try:
+                device_client.set_voltage(preset.voltage_v)
+                device_client.set_current(preset.current_a)
+            except Exception as exc:
+                QMessageBox.warning(self, "Recall error", str(exc))
+                return
+
         self.status_lbl.setText(f"Recalled {preset.display_name}")
 
     def _save_slot(self) -> None:

@@ -40,14 +40,6 @@ from .ui_panels import (
     StatusLogPanel,
 )
 from .log_table_dock import LogTableDockWidget
-from .worker import MeasurementThread
-
-_FONT_TTF = Path(__file__).parent / "assets" / "fonts" / "DSEG7Classic-Regular.ttf"
-
-# Temperature threshold above which the IPS3608 fan is considered active.
-# The device controls the fan automatically via firmware; no serial register is exposed.
-# TODO: replace with a direct register read if/when the fan status register is documented.
-_FAN_ON_THRESHOLD_C = 45.0
 
 try:
     from serial.tools import list_ports
@@ -64,8 +56,6 @@ class MainWindow(QMainWindow):
         self.app_state = AppState()
         self.device_config = DEFAULT_DEVICE_CONFIG
         self.device_client: Optional[object] = None
-        self._measure_thread: Optional[MeasurementThread] = None
-        self.temperature_limit: float = 60.0
         self.log_samples: list[LogSample] = []
         self.last_measurement: Optional[Measurement] = None
         self.log_table_dock: Optional[LogTableDockWidget] = None
@@ -74,6 +64,7 @@ class MainWindow(QMainWindow):
         self.active_routine: Optional[ActiveRoutineRunner] = None
         self.active_routine_name: str = "--"
         self.last_routine_setpoint_mono = 0.0
+        # Supporto nuovo formato memory_presets.json, fallback legacy
         mem_path = Path.cwd() / "memory_presets.json"
         if not mem_path.exists():
             mem_path = Path.cwd() / "ips3608_memories.json"
@@ -86,6 +77,10 @@ class MainWindow(QMainWindow):
         self.graph_panel = GraphPanel()
         self.datalogger_panel = DataloggerPanel()
         self.status_panel = StatusLogPanel()
+
+        self.measure_timer = QTimer(self)
+        self.measure_timer.timeout.connect(self._read_measurement_cycle)
+        self.measure_timer.setInterval(500)
 
         self.log_status_timer = QTimer(self)
         self.log_status_timer.timeout.connect(self._update_log_runtime_info)
@@ -203,11 +198,27 @@ class MainWindow(QMainWindow):
         self.output_panel.current_changed.connect(self.on_current_changed)
         self.output_panel.temperature_limit_changed.connect(self.on_temperature_limit_changed)
         self.temperature_limit = self.output_panel.temp_limit_spin.value()
+    def on_temperature_limit_changed(self, value: float) -> None:
+        self.temperature_limit = value
 
         self.datalogger_panel.start_log_requested.connect(self.start_logging)
         self.datalogger_panel.stop_log_requested.connect(self.stop_logging)
         self.datalogger_panel.show_table_requested.connect(self.show_log_table)
         self.datalogger_panel.export_csv_requested.connect(self.export_log_csv)
+        self.datalogger_panel.debug_log_requested.connect(self._debug_log_entry)
+
+    def _debug_log_entry(self):
+        from datetime import datetime
+        import random
+        m = type('FakeMeasurement', (), {})()
+        m.timestamp = datetime.now()
+        m.voltage_v = random.uniform(0, 36)
+        m.current_a = random.uniform(0, 8)
+        m.temperature_c = random.uniform(20, 80)
+        m.power_w = m.voltage_v * m.current_a
+        self._status("DEBUG: aggiunto log sample fittizio e apertura log table")
+        self.append_log_sample(m)
+        self.show_log_table()
 
         self.act_export_file.triggered.connect(self.export_log_csv)
         self.act_exit.triggered.connect(self.close)
@@ -233,42 +244,39 @@ class MainWindow(QMainWindow):
         self.act_routine_stop.triggered.connect(self.stop_active_routine)
         self.act_memory_manage.triggered.connect(self.manage_memories)
 
-    def on_temperature_limit_changed(self, value: float) -> None:
-        self.temperature_limit = value
-
     def _apply_style(self) -> None:
         self.setStyleSheet(
             """
-            QMainWindow { background-color: #F4F6F8; color: #0F1B2A; }
+            QMainWindow { background-color: #f5f7fb; color: #1f2937; }
             QGroupBox {
-                border: 1px solid #D7DEE6; border-radius: 8px; margin-top: 10px;
-                font-weight: 700; color: #0F1B2A; background: #FFFFFF;
+                border: 1px solid #d1d5db; border-radius: 8px; margin-top: 10px;
+                font-weight: 700; color: #111827; background: #ffffff;
             }
             QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 6px; }
-            QLabel { color: #0F1B2A; }
+            QLabel { color: #1f2937; }
             QPushButton {
-                background-color: #FFFFFF; color: #0F1B2A; border: 1px solid #D7DEE6;
+                background-color: #ffffff; color: #1f2937; border: 1px solid #cbd5e1;
                 border-radius: 6px; padding: 6px 10px; font-weight: 600;
             }
-            QPushButton:hover { background-color: #EBF2FB; }
+            QPushButton:hover { background-color: #e5eef9; }
             QComboBox, QDoubleSpinBox {
-                background-color: #FFFFFF; border: 1px solid #D7DEE6; border-radius: 5px;
-                padding: 4px; color: #0F1B2A;
+                background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 5px;
+                padding: 4px; color: #111827;
             }
             QTableWidget {
-                background-color: #FFFFFF; color: #0F1B2A; gridline-color: #D7DEE6;
-                border: 1px solid #D7DEE6;
+                background-color: #ffffff; color: #111827; gridline-color: #e5e7eb;
+                border: 1px solid #d1d5db;
             }
             QHeaderView::section {
-                background-color: #F4F6F8; color: #0F1B2A; border: 1px solid #D7DEE6;
-                padding: 4px; font-weight: 600;
+                background-color: #e5e7eb; color: #111827; border: 1px solid #d1d5db;
+                padding: 4px;
             }
-            QTextEdit { background-color: #FFFFFF; border: 1px solid #D7DEE6; color: #0F1B2A; }
-            QFrame#MetricCard {
-                background-color: #FFFFFF; border: 1px solid #D7DEE6; border-radius: 12px;
-            }
+            QTextEdit { background-color: #ffffff; border: 1px solid #d1d5db; color: #111827; }
+            QFrame#MetricCard { background-color: #ffffff; border: 1px solid #d1d5db; border-radius: 10px; }
             """
         )
+        pg.setConfigOption("background", "#ffffff")
+        pg.setConfigOption("foreground", "#1f2937")
 
     def _status(self, text: str) -> None:
         self.statusBar().showMessage(text, 6000)
@@ -276,6 +284,7 @@ class MainWindow(QMainWindow):
 
     def refresh_ports(self) -> None:
         ports = [p.device for p in list_ports.comports()]
+        # Keep SIMULATED available in all modes for explicit testing.
         self.connection_panel.set_ports(ports, include_simulated=True)
         self._select_default_port_for_mode()
 
@@ -301,6 +310,7 @@ class MainWindow(QMainWindow):
                 combo.setCurrentIndex(idx)
             return
 
+        # In real mode prefer a hardware serial port if available.
         if current and current != "SIMULATED":
             return
 
@@ -335,6 +345,7 @@ class MainWindow(QMainWindow):
 
             assert self.device_client is not None
             self.device_client.connect()
+            # AGGIORNA STATO PRIMA DELLA UI
             self.app_state.connected = True
             self.app_state.output_on = False
             self.app_state.last_error = "--"
@@ -346,11 +357,7 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
-            self._measure_thread = MeasurementThread(self.device_client)
-            self._measure_thread.measurement_ready.connect(self._on_measurement_ready)
-            self._measure_thread.error_occurred.connect(self._on_measure_error)
-            self._measure_thread.start()
-
+            self.measure_timer.start()
             self._set_ui_state(UiState.CONNECTED_OUTPUT_OFF)
             conn_kind = "simulated" if use_simulated else "real"
             self._status(f"Connected ({conn_kind}) on {cfg.port}.")
@@ -361,24 +368,17 @@ class MainWindow(QMainWindow):
             self._status(f"Connection error: {exc}")
 
     def disconnect_device(self) -> None:
+        self.measure_timer.stop()
         if self.app_state.logging_on:
             self.stop_logging(silent=True)
-
-        # Signal the thread to stop before closing the port so blocking reads fail fast.
-        if self._measure_thread is not None:
-            self._measure_thread.requestInterruption()
 
         if self.device_client is not None:
             try:
                 self.device_client.disconnect()
             except Exception as exc:
                 self.app_state.last_error = str(exc)
+
         self.device_client = None
-
-        if self._measure_thread is not None:
-            self._measure_thread.wait(2000)
-            self._measure_thread = None
-
         self.app_state.connected = False
         self.app_state.output_on = False
         self.app_state.last_command = "DISCONNECT"
@@ -440,31 +440,28 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             self._status(f"Current set failed: {exc}")
 
-    def _on_measurement_ready(self, m: Measurement) -> None:
-        if not self.app_state.connected:
+    def _read_measurement_cycle(self) -> None:
+        if not self.app_state.connected or self.device_client is None:
             return
-        if not self.app_state.output_on:
-            m = replace(m, current_a=0.0)
-        self.last_measurement = m
-        self.app_state.last_data_ts = m.timestamp
-        self.app_state.last_error = "--"
+        try:
+            m = self.device_client.read_measurements()
+            if not self.app_state.output_on:
+                m.current_a = 0.0
+            self.last_measurement = m
+            self.app_state.last_data_ts = m.timestamp
+            self.app_state.last_error = "--"
 
-        if m.temperature_c >= self.temperature_limit and self.app_state.output_on:
-            self.stop_output()
-            QMessageBox.warning(
-                self,
-                "Temperatura Superata",
-                f"Temperatura {m.temperature_c:.1f}°C >= soglia {self.temperature_limit:.1f}°C. Output spento automaticamente.",
-            )
+            # Stop output se supera la soglia temperatura
+            if m.temperature_c >= self.temperature_limit and self.app_state.output_on:
+                self.stop_output()
+                QMessageBox.warning(self, "Temperatura Superata", f"Temperatura {m.temperature_c:.1f}°C >= soglia {self.temperature_limit:.1f}°C. Output spento automaticamente.")
 
-        fan_on = m.temperature_c >= _FAN_ON_THRESHOLD_C
-        self.cards_panel.update_measurement(m, self.output_panel.vset_spin.value(), self.output_panel.iset_spin.value(), fan_on=fan_on)
-        self.graph_panel.add_measurement(m)
-        self._maybe_append_log_sample(m)
-        self._refresh_status_summary()
-
-    def _on_measure_error(self, message: str) -> None:
-        self._handle_communication_error(f"Read cycle error: {message}")
+            self.cards_panel.update_measurement(m, self.output_panel.vset_spin.value(), self.output_panel.iset_spin.value())
+            self.graph_panel.add_measurement(m)
+            self._maybe_append_log_sample(m)
+            self._refresh_status_summary()
+        except Exception as exc:
+            self._handle_communication_error(f"Read cycle error: {exc}")
 
     def manage_routines(self) -> None:
         dlg = RoutineManagerDialog(self, copy.deepcopy(self.routines))
@@ -479,35 +476,13 @@ class MainWindow(QMainWindow):
             self.start_routine_by_name(dlg.selected_run_name)
 
     def manage_memories(self) -> None:
-        dlg = MemoryPresetDialog(
-            self,
-            copy.deepcopy(self.memory_presets),
-            current_voltage=self.output_panel.vset_spin.value(),
-            current_current=self.output_panel.iset_spin.value(),
-        )
-        dlg.recall_requested.connect(self._apply_memory_recall)
+        dlg = MemoryPresetDialog(self, copy.deepcopy(self.memory_presets))
         if dlg.exec() != QDialog.Accepted:
             return
 
         self.memory_presets = dlg.presets
         self.memory_repository.save_all(self.memory_presets)
         self._status("Memory presets saved (M1..M6).")
-
-    def _apply_memory_recall(self, voltage: float, current: float) -> None:
-        self.output_panel.vset_spin.blockSignals(True)
-        self.output_panel.iset_spin.blockSignals(True)
-        self.output_panel.vset_spin.setValue(voltage)
-        self.output_panel.iset_spin.setValue(current)
-        self.output_panel.vset_spin.blockSignals(False)
-        self.output_panel.iset_spin.blockSignals(False)
-
-        if self.device_client is not None and self.app_state.connected:
-            try:
-                self.device_client.set_voltage(voltage)
-                self.device_client.set_current(current)
-                self.app_state.last_command = f"RECALL {voltage:.2f}V {current:.3f}A"
-            except Exception as exc:
-                QMessageBox.warning(self, "Recall error", str(exc))
 
     def start_routine_by_name(self, name: str) -> None:
         if not self.app_state.connected or self.device_client is None:
@@ -645,8 +620,6 @@ class MainWindow(QMainWindow):
         )
         self._update_log_runtime_info()
         self.datalogger_panel.set_samples(self.log_samples)
-        if self.log_table_dock is not None and self.log_table_dock.isVisible():
-            self.log_table_dock.set_samples(self.log_samples)
 
     def _update_log_runtime_info(self) -> None:
         last = self.log_samples[-1].timestamp if self.log_samples else None
@@ -668,6 +641,7 @@ class MainWindow(QMainWindow):
         self._status("Log samples cleared.")
 
     def show_log_table(self) -> None:
+        self._status("DEBUG: apertura log table dock richiesta")
         if self.log_table_dock is None:
             self.log_table_dock = LogTableDockWidget(self)
             self.log_table_dock.export_requested.connect(self.export_log_csv)
@@ -690,6 +664,8 @@ class MainWindow(QMainWindow):
         if QMessageBox.question(self, "Clear log", "Clear all samples from the log table?") != QMessageBox.Yes:
             return
         self.clear_log(confirm=False)
+
+    # Removed: _clear_log_from_dialog (replaced by _clear_log_from_dock)
 
     def export_log_csv(self) -> None:
         if not self.log_samples:
@@ -718,16 +694,11 @@ class MainWindow(QMainWindow):
 
     def _handle_communication_error(self, message: str) -> None:
         self.app_state.last_error = message
-        self.app_state.connected = False
-        self.app_state.output_on = False
         self._status(message)
         self.stop_active_routine(silent=True)
         if self.app_state.logging_on:
             self.stop_logging(silent=True)
-        if self._measure_thread is not None:
-            self._measure_thread.requestInterruption()
-            self._measure_thread.wait(500)
-            self._measure_thread = None
+        self.measure_timer.stop()
         self._set_ui_state(UiState.COMMUNICATION_ERROR)
 
     def _set_ui_state(self, state: str) -> None:
@@ -767,7 +738,6 @@ class MainWindow(QMainWindow):
             self.connection_panel.conn_btn.setEnabled(True)
             self.connection_panel.set_connection_state("Communication error", "#f97316")
             self.output_panel.toggle_btn.setEnabled(False)
-            self.output_panel.set_output_state(False)
             self.datalogger_panel.start_btn.setEnabled(False)
             self.datalogger_panel.stop_btn.setEnabled(False)
 
@@ -819,15 +789,10 @@ class MainWindow(QMainWindow):
 
 def main() -> int:
     app = QApplication(sys.argv)
-    if _FONT_TTF.exists():
-        from PySide6.QtGui import QFontDatabase
-        QFontDatabase.addApplicationFont(str(_FONT_TTF))
-    # Must be set before any PlotWidget is created (pyqtgraph reads these at widget init time)
-    pg.setConfigOption("background", "#FFFFFF")
-    pg.setConfigOption("foreground", "#0F1B2A")
     app.setFont(QFont("Segoe UI", 10))
     win = MainWindow()
     win.show()
+    # Shortcut per View Log Table (Ctrl+L)
     from PySide6.QtGui import QKeySequence, QShortcut
     QShortcut(QKeySequence("Ctrl+L"), win, win.show_log_table)
     return app.exec()

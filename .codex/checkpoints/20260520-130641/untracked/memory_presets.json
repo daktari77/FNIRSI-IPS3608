@@ -1,0 +1,47 @@
+{
+  "version": 2,
+  "presets": [
+    {
+      "slot_id": "M1",
+      "label": "",
+      "voltage_v": 0.0,
+      "current_a": 0.0,
+      "enabled": false
+    },
+    {
+      "slot_id": "M2",
+      "label": "",
+      "voltage_v": 0.0,
+      "current_a": 0.0,
+      "enabled": false
+    },
+    {
+      "slot_id": "M3",
+      "label": "",
+      "voltage_v": 0.0,
+      "current_a": 0.0,
+      "enabled": false
+    },
+    {
+      "slot_id": "M4",
+      "label": "",
+      "voltage_v": 0.0,
+      "current_a": 0.0,
+      "enabled": false
+    },
+    {
+      "slot_id": "M5",
+      "label": "",
+      "voltage_v": 0.0,
+      "current_a": 0.0,
+      "enabled": false
+    },
+    {
+      "slot_id": "M6",
+      "label": "",
+      "voltage_v": 0.0,
+      "current_a": 0.0,
+      "enabled": false
+    }
+  ]
+}

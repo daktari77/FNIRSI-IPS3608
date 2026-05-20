@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+import threading
 import time
 from datetime import datetime
 from typing import Optional
@@ -31,6 +32,8 @@ class IPS3608Client:
     def __init__(self, config: DeviceConfig):
         self.config = config
         self._ser: Optional[serial.Serial] = None
+        self._lock = threading.Lock()
+        self._last_temp_c: Optional[float] = None
 
     def connect(self) -> bool:
         try:
@@ -73,18 +76,6 @@ class IPS3608Client:
     def is_connected(self) -> bool:
         return self._ser is not None and self._ser.is_open
 
-    def send_command(self, command: str) -> str:
-        if command == "START_OUTPUT":
-            self.start_output()
-            return "OK"
-        if command == "STOP_OUTPUT":
-            self.stop_output()
-            return "OK"
-        if command == "READ_MEASUREMENTS":
-            m = self.read_measurements()
-            return f"{m.voltage_v:.3f},{m.current_a:.3f},{m.temperature_c:.2f}"
-        raise ValueError(f"Unsupported command: {command}")
-
     def read_measurements(self) -> Measurement:
         self._ensure_connected()
 
@@ -94,14 +85,17 @@ class IPS3608Client:
         if live[3] != 0x0C:
             raise RuntimeError("Invalid live response length")
 
-        temp = self._query_first_matching_frame(cmd_read_temp().to_bytes(), CMD_READ, REG_TEMP, 0.4)
-        if temp is None:
-            raise RuntimeError("Timeout/empty response on temperature register")
-        if temp[3] != 0x04:
-            raise RuntimeError("Invalid temperature response length")
+        temp = self._query_first_matching_frame(cmd_read_temp().to_bytes(), CMD_READ, REG_TEMP, 0.6)
+        if temp is not None and temp[3] == 0x04:
+            temperature_c = parse_temp_payload(temp[4:8])
+            self._last_temp_c = temperature_c
+        elif self._last_temp_c is not None:
+            # Non-fatal: device didn't respond in time, reuse last known temperature.
+            temperature_c = self._last_temp_c
+        else:
+            raise RuntimeError("Timeout/empty response on temperature register (no prior reading available)")
 
         voltage_v, current_a, _dev_power_w = parse_live_payload(live[4:16])
-        temperature_c = parse_temp_payload(temp[4:8])
 
         return Measurement(
             timestamp=datetime.now(),
@@ -134,11 +128,12 @@ class IPS3608Client:
         self._ensure_connected()
         assert self._ser is not None
         payload = packet_obj.to_bytes()
-        try:
-            self._ser.write(payload)
-            self._ser.flush()
-        except Exception as exc:
-            raise RuntimeError(f"Write error: {exc}") from exc
+        with self._lock:
+            try:
+                self._ser.write(payload)
+                self._ser.flush()
+            except Exception as exc:
+                raise RuntimeError(f"Write error: {exc}") from exc
 
     def _query_first_matching_frame(
         self,
@@ -150,14 +145,18 @@ class IPS3608Client:
         self._ensure_connected()
         assert self._ser is not None
 
-        self._ser.write(packet)
-        self._ser.flush()
+        with self._lock:
+            self._ser.write(packet)
+            self._ser.flush()
 
         deadline = time.monotonic() + timeout_s
         buf = bytearray()
 
         while time.monotonic() < deadline:
-            chunk = self._ser.read(256)
+            with self._lock:
+                if not self.is_connected():
+                    break
+                chunk = self._ser.read(64)
             if not chunk:
                 time.sleep(0.005)
                 continue
@@ -188,11 +187,6 @@ class SimulatedIPS3608Client:
 
     def is_connected(self) -> bool:
         return self._connected
-
-    def send_command(self, command: str) -> str:
-        if not self._connected:
-            raise RuntimeError("Device not connected")
-        return f"SIM_OK:{command}"
 
     def read_measurements(self) -> Measurement:
         if not self._connected:

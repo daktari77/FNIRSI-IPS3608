@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "routines": [
+    {
+      "name": "Test",
+      "steps": [
+        {
+          "voltage_start_v": 12.0,
+          "voltage_end_v": 12.0,
+          "current_start_a": 1.0,
+          "current_end_a": 1.0,
+          "duration_s": 10.0
+        },
+        {
+          "voltage_start_v": 5.0,
+          "voltage_end_v": 12.0,
+          "current_start_a": 0.1,
+          "current_end_a": 0.5,
+          "duration_s": 10.0
+        }
+      ],
+      "stop_output_on_finish": true,
+      "execution_limit_s": 0.0
+    }
+  ]
+}
