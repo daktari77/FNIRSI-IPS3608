@@ -1,6 +1,8 @@
 # IPS3608 Remote Control
 
-Versione corrente: `1.0.0`
+Versione stabile: `1.0.0`
+
+Versione in sviluppo (branch `feature/v2-0-0-planning`): `2.0.0-dev.0`
 
 Desktop app Python per il controllo del FNIRSI IPS3608, con interfaccia PySide6, grafici realtime, datalogger, memorie M1..M6 e modalità simulata per sviluppo/test.
 
