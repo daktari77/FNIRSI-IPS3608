@@ -16,7 +16,9 @@ created: 2026-05-20
 
 Documentazione pratica per controllo dell'alimentatore **FNIRSI IPS3608** via seriale USB su Windows.
 
-Versione attuale dell'app desktop: `1.0.0`
+Versione stabile: `1.0.0`
+
+Versione in sviluppo (branch `feature/v2-0-0-planning`): `2.0.0-dev.0`
 
 Contenuto principale:
 
@@ -339,6 +341,56 @@ Idee future:
 - profili preset richiamabili da GUI
 - allarmi software su soglie V/I/T
 - safe-start obbligatorio con conferma
+
+---
+
+## 12. Roadmap Frontend Professionale
+
+Obiettivo: evolvere l'app da controllo remoto a frontend da laboratorio con sicurezza, ripetibilita e tracciabilita.
+
+### 12.1 Release 2.0.0 - Safety e Logging Professionale
+
+Feature target:
+
+- soft-start configurabile e profili safe-default
+- limiti software hard su `V/I/P/T` con conferma operatore
+- watchdog comunicazione seriale con fail-safe `Output OFF`
+- metadata sessione obbligatori (`operatore`, `DUT`, `lotto`, `note`)
+- marker eventi in log (`START`, `STOP`, cambio setpoint, allarmi)
+
+Criteri di accettazione:
+
+- nessun `START` consentito se i setpoint superano i limiti configurati
+- a perdita comunicazione, output spento entro timeout configurato
+- ogni CSV include metadata e timeline eventi
+
+### 12.2 Release 2.1.0 - Routine Avanzate e Report
+
+Feature target:
+
+- routine `step/ramp/hold` con durata e stop finale opzionale
+- validazione preventiva routine (dry-run in simulazione)
+- report sessione in PDF con grafico, statistiche e allarmi
+- storico preset con versione e data modifica
+
+Criteri di accettazione:
+
+- routine non valide bloccate prima dell'esecuzione
+- ogni sessione produce artefatto esportabile (CSV + PDF)
+
+### 12.3 Release 2.2.0 - Multi-Device e Automazione
+
+Feature target:
+
+- gestione multi-strumento in dashboard unica
+- start/stop sincronizzato su gruppi di device
+- API locale (`REST/WebSocket`) per orchestrazione test bench
+- audit trail operazioni con utente, timestamp e azione
+
+Criteri di accettazione:
+
+- controllo simultaneo stabile di almeno 2 device
+- API in grado di avviare/arrestare test senza uso UI
 
 ---
 
