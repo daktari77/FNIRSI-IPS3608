@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 from .clients import IPS3608Client, SimulatedIPS3608Client
 from .memory_presets import MemoryPresetDialog, MemoryRepository
 from . import __version__
-from .models import AppState, DeviceConfig, LogSample, Measurement, RoutineDefinition, UiState, DEFAULT_DEVICE_CONFIG
+from .models import AppState, DeviceConfig, LogSample, Measurement, RoutineDefinition, RoutineState, UiState, DEFAULT_DEVICE_CONFIG
 from .routine_dialogs import RoutineManagerDialog
 from .routines import ActiveRoutineRunner, RoutineRepository
 from .ui_panels import (
@@ -523,6 +523,7 @@ class MainWindow(QMainWindow):
             return
 
         self.active_routine = ActiveRoutineRunner(routine)
+        self.active_routine.start()
         self.active_routine_name = routine.name
         self.last_routine_setpoint_mono = 0.0
         self.routine_timer.start()
@@ -553,18 +554,19 @@ class MainWindow(QMainWindow):
             self.stop_active_routine(silent=True)
             return
 
-        setpoints = self.active_routine.current_setpoints()
+        setpoints = self.active_routine.tick()
         if setpoints is None:
-            ended_name = self.active_routine_name
-            self.stop_active_routine(silent=True)
-            self._status(f"Routine completed: {ended_name}")
+            if self.active_routine.state == RoutineState.COMPLETED:
+                ended_name = self.active_routine_name
+                self.stop_active_routine(silent=True)
+                self._status(f"Routine completed: {ended_name}")
             return
 
         now_mono = time.monotonic()
         if now_mono - self.last_routine_setpoint_mono < 0.2:
             return
 
-        vset, iset = setpoints
+        vset, iset, output_on = setpoints
         try:
             self.device_client.set_voltage(vset)
             self.device_client.set_current(iset)
@@ -576,8 +578,10 @@ class MainWindow(QMainWindow):
             self.output_panel.iset_spin.blockSignals(False)
             self.last_routine_setpoint_mono = now_mono
             self.app_state.last_command = f"ROUTINE_SET {vset:.2f}V {iset:.3f}A"
-            if not self.app_state.output_on:
+            if output_on and not self.app_state.output_on:
                 self.start_output()
+            elif not output_on and self.app_state.output_on:
+                self.stop_output()
         except Exception as exc:
             self.stop_active_routine(silent=True)
             self._handle_communication_error(f"Routine execution error: {exc}")

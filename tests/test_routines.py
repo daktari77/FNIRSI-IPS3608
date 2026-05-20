@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ips3608_app.models import RoutineDefinition, RoutineStep
+from ips3608_app.models import RoutineDefinition, RoutineState, RoutineStep
 from ips3608_app.routines import ActiveRoutineRunner, RoutineRepository
 
 
@@ -38,17 +38,20 @@ class RoutineTests(unittest.TestCase):
 
         self.assertEqual(len(routines), 1)
         self.assertEqual(routines[0].name, "Ramp")
-        self.assertEqual(routines[0].steps[0].voltage_end_v, 2.0)
+        self.assertEqual(routines[0].steps[0].voltage_v, 2.0)
+        self.assertEqual(routines[0].steps[0].current_a, 0.2)
 
-    def test_active_routine_returns_none_after_duration(self):
+    def test_active_routine_completes_after_duration(self):
         routine = RoutineDefinition(
             name="Short",
-            steps=[RoutineStep(1.0, 2.0, 0.1, 0.2, 1.0)],
+            steps=[RoutineStep(voltage_v=2.0, current_a=0.2, duration_s=1.0)],
         )
         runner = ActiveRoutineRunner(routine)
-        runner.started_mono -= 2.0
+        runner.start()
+        runner._start_mono -= 2.0
 
-        self.assertIsNone(runner.current_setpoints())
+        self.assertIsNone(runner.tick())
+        self.assertEqual(runner.state, RoutineState.COMPLETED)
 
 
 if __name__ == "__main__":
