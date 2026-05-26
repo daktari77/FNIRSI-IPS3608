@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import csv
 import copy
+import shutil
+import subprocess
 import sys
 import time
 from dataclasses import replace
@@ -10,7 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 import pyqtgraph as pg
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import QProcess, QTimer, Qt
 from PySide6.QtGui import QAction, QActionGroup, QCloseEvent, QFont
 from PySide6.QtWidgets import (
     QApplication,
@@ -110,8 +112,10 @@ class MainWindow(QMainWindow):
 
         file_menu = menu.addMenu("File")
         self.act_export_file = QAction("Export log CSV", self)
+        self.act_open_shell = QAction("Open scripting shell", self)
         self.act_exit = QAction("Exit", self)
         file_menu.addAction(self.act_export_file)
+        file_menu.addAction(self.act_open_shell)
         file_menu.addSeparator()
         file_menu.addAction(self.act_exit)
 
@@ -210,6 +214,7 @@ class MainWindow(QMainWindow):
         self.datalogger_panel.export_csv_requested.connect(self.export_log_csv)
 
         self.act_export_file.triggered.connect(self.export_log_csv)
+        self.act_open_shell.triggered.connect(self.open_scripting_shell)
         self.act_exit.triggered.connect(self.close)
 
         self.act_log_start.triggered.connect(self.start_logging)
@@ -273,6 +278,45 @@ class MainWindow(QMainWindow):
     def _status(self, text: str) -> None:
         self.statusBar().showMessage(text, 6000)
         self.status_panel.add_log_line(text)
+
+    def open_scripting_shell(self) -> None:
+        shell_path = Path(__file__).resolve().parents[1] / "ips3608_shell.py"
+        if not shell_path.exists():
+            QMessageBox.warning(self, "Scripting shell missing", f"Could not find {shell_path}")
+            return
+
+        launched = False
+        try:
+            if sys.platform.startswith("win"):
+                launched = QProcess.startDetached(
+                    "cmd.exe",
+                    ["/c", "start", "", sys.executable, str(shell_path), "--help"],
+                )
+            elif sys.platform == "darwin":
+                script = f'tell application "Terminal" to do script "{sys.executable} {shell_path} --help"'
+                launched = QProcess.startDetached("osascript", ["-e", script])
+            else:
+                # Try common Linux terminals in order
+                for terminal in ["x-terminal-emulator", "gnome-terminal", "konsole", "xfce4-terminal", "lxterminal"]:
+                    if shutil.which(terminal):
+                        launched = QProcess.startDetached(terminal, ["-e", f"{sys.executable} {shell_path} --help"])
+                        break
+        except Exception:
+            launched = False
+
+        if not launched:
+            try:
+                help_text = subprocess.run(
+                    [sys.executable, str(shell_path), "--help"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                ).stdout
+            except Exception as exc:
+                QMessageBox.warning(self, "Scripting shell not available", f"Could not start scripting shell: {exc}")
+                return
+
+            QMessageBox.information(self, "Scripting shell help", help_text or "The scripting shell is available at {shell_path}.")
 
     def refresh_ports(self) -> None:
         ports = [p.device for p in list_ports.comports()]

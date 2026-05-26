@@ -50,6 +50,8 @@ This build includes the application assets and font file required by `ips3608_ap
 A lightweight scripting wrapper is available in `ips3608_shell.py` and uses the existing Python library under `ips3608_app/`.
 It is useful for command-line automation, shell scripts, and testing without the GUI.
 
+The GUI also exposes this wrapper under `File -> Open scripting shell` so users can quickly launch or view the shell usage from the app.
+
 Example usage:
 
 ```powershell
