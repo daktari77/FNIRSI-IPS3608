@@ -142,28 +142,37 @@ class IPS3608Client:
         expected_reg: int,
         timeout_s: float,
     ) -> Optional[bytes]:
+        """Send *packet* and return the first response frame matching
+        (expected_cmd, expected_reg), or None on timeout.
+
+        The lock is held for the entire write→read cycle so that no other
+        caller (e.g. set_voltage from the main thread) can inject a command
+        between the request and the corresponding device response.  The
+        maximum hold time equals *timeout_s* (≤ 0.6 s by current callers),
+        which is acceptable because disconnect_device() waits for the
+        measurement thread before touching the client.
+        """
         self._ensure_connected()
         assert self._ser is not None
+
+        deadline = time.monotonic() + timeout_s
+        buf = bytearray()
 
         with self._lock:
             self._ser.write(packet)
             self._ser.flush()
 
-        deadline = time.monotonic() + timeout_s
-        buf = bytearray()
-
-        while time.monotonic() < deadline:
-            with self._lock:
-                if not self.is_connected():
+            while time.monotonic() < deadline:
+                if not self._ser.is_open:
                     break
+                # read() blocks up to config.timeout (0.2 s); no busy-sleep needed.
                 chunk = self._ser.read(64)
-            if not chunk:
-                time.sleep(0.005)
-                continue
-            buf.extend(chunk)
-            for frame in extract_frames(buf):
-                if frame[1] == expected_cmd and frame[2] == expected_reg:
-                    return frame
+                if not chunk:
+                    continue
+                buf.extend(chunk)
+                for frame in extract_frames(buf):
+                    if frame[1] == expected_cmd and frame[2] == expected_reg:
+                        return frame
 
         return None
 

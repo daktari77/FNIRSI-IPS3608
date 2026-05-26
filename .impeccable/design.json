@@ -1,0 +1,149 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-05-26T00:00:00Z",
+  "title": "Design System: IPS3608 Remote Control",
+  "extensions": {
+    "colorMeta": {
+      "instrument-ink":       { "role": "neutral",   "displayName": "Instrument Ink",       "canonical": "#0F1B2A", "tonalRamp": ["#0F1B2A","#1e2d3f","#2d4055","#3d546c","#4d6882","#6d8099","#9aaab8","#c8d3dc"] },
+      "instrument-panel":     { "role": "neutral",   "displayName": "Instrument Panel",     "canonical": "#F4F6F8", "tonalRamp": ["#1a2028","#2e3740","#424f5a","#576874","#6e818f","#94a5b1","#c6d1d9","#F4F6F8"] },
+      "instrument-white":     { "role": "neutral",   "displayName": "Instrument White",     "canonical": "#FFFFFF", "tonalRamp": ["#1a1c1e","#2e3234","#43484b","#5a6063","#72797d","#96a0a5","#c5ced2","#FFFFFF"] },
+      "panel-seam":           { "role": "neutral",   "displayName": "Panel Seam",           "canonical": "#D7DEE6", "tonalRamp": ["#1e252d","#31404e","#46566a","#5c6e87","#7488a3","#9aafc8","#bfcfdf","#D7DEE6"] },
+      "console-slate":        { "role": "neutral",   "displayName": "Console Slate",        "canonical": "#4A5A6A", "tonalRamp": ["#0f1b2a","#1e2d3f","#2d4055","#3d546c","#4A5A6A","#6d8099","#9aaab8","#c8d3dc"] },
+      "hover-surface":        { "role": "neutral",   "displayName": "Hover Surface",        "canonical": "#EBF2FB", "tonalRamp": ["#0b2a52","#0f3d78","#1555a8","#1a6ecb","#2484eb","#5ea5f5","#a3ccfa","#EBF2FB"] },
+      "voltage-blue":         { "role": "primary",   "displayName": "Voltage Blue",         "canonical": "#0B84F3", "tonalRamp": ["#062850","#0a3f7f","#0d57b0","#0b6fd6","#0B84F3","#3d9ef5","#7bbcf9","#c5e1fd"] },
+      "ampere-green":         { "role": "secondary", "displayName": "Ampere Green",         "canonical": "#00A86B", "tonalRamp": ["#003823","#005c3b","#008055","#009562","#00A86B","#33c288","#7adbb3","#c2f0df"] },
+      "critical-red":         { "role": "tertiary",  "displayName": "Critical Red",         "canonical": "#EF4444", "tonalRamp": ["#4a0a0a","#7a1010","#aa1818","#cc2020","#EF4444","#f47070","#f9a3a3","#fdd8d8"] },
+      "watt-gold":            { "role": "tertiary",  "displayName": "Watt Gold",            "canonical": "#F59E0B", "tonalRamp": ["#4a2e00","#7a4c00","#aa6a00","#cc8400","#F59E0B","#f8b84a","#fcd089","#fee8c3"] },
+      "active-green":         { "role": "tertiary",  "displayName": "Active Green",         "canonical": "#22C55E", "tonalRamp": ["#073d1a","#0d6429","#138a3a","#18a548","#22C55E","#54d984","#91e8b0","#cdf5de"] },
+      "active-green-deep":    { "role": "tertiary",  "displayName": "Active Green Deep",    "canonical": "#16A34A", "tonalRamp": ["#063318","#0a5527","#0e7736","#129940","#16A34A","#3fc471","#7ddba4","#bff0d3"] },
+      "stop-red":             { "role": "tertiary",  "displayName": "Stop Red",             "canonical": "#DC2626", "tonalRamp": ["#3d0808","#6b0f0f","#991616","#bb1e1e","#DC2626","#e85555","#f09090","#f9cccc"] },
+      "transitional-yellow":  { "role": "tertiary",  "displayName": "Transitional Yellow",  "canonical": "#EAB308", "tonalRamp": ["#453301","#735502","#a17703","#c59204","#EAB308","#f0c63e","#f6d97f","#fbecbe"] },
+      "fault-orange":         { "role": "tertiary",  "displayName": "Fault Orange",         "canonical": "#F97316", "tonalRamp": ["#4a1800","#7a2a00","#aa3d00","#cc5000","#F97316","#fb9849","#fdbc84","#fee0c2"] }
+    },
+    "typographyMeta": {
+      "reading": { "displayName": "Reading",  "purpose": "Live measurement values in MetricCards. DSEG7 Classic gives the visual weight of a physical 7-segment instrument display. Used exclusively for V, I, P, T readings." },
+      "unit":    { "displayName": "Unit",     "purpose": "Channel unit labels (V, A, W, °C) adjacent to the Reading value. Rendered in channel color, smaller than the value." },
+      "headline":{ "displayName": "Headline", "purpose": "Output status label (Output ON / OFF). Used sparingly for panel-level operational state." },
+      "body":    { "displayName": "Body",     "purpose": "All control labels, spinbox entries, menu items, log text. The default for everything not explicitly elevated." },
+      "label":   { "displayName": "Label",    "purpose": "MetricCard channel titles, setpoint annotations, delta values, GroupBox titles. Uppercase letter-spacing signals annotation role." }
+    },
+    "shadows": [
+      {
+        "name": "floating-ambient",
+        "value": "0 4px 16px rgba(15, 27, 42, 0.10)",
+        "purpose": "Reserved for floating elements that need to read as elevated (modal dialogs, floating dock). Never applied to MetricCards, GroupBoxes, or base containers."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-transition",
+        "value": "0.15s ease-out",
+        "purpose": "Button state changes (START/STOP color swap), status dot color change, running banner appear/disappear. Short and decisive — instruments respond immediately."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "MetricCard — Voltage",
+      "kind": "custom",
+      "refersTo": "metric-card",
+      "description": "Live measurement display for one physical channel. Signature component of the instrument panel.",
+      "html": "<div class=\"ds-metric-card ds-metric-card--voltage\">\n  <div class=\"ds-metric-card__header\">\n    <span class=\"ds-metric-card__title\">VOLTAGE</span>\n  </div>\n  <div class=\"ds-metric-card__value-row\">\n    <span class=\"ds-metric-card__value\">12.34</span>\n    <span class=\"ds-metric-card__unit\">V</span>\n  </div>\n  <div class=\"ds-metric-card__meta-row\">\n    <span class=\"ds-metric-card__setpoint\">Set 12.00 V</span>\n    <span class=\"ds-metric-card__delta ds-delta-ok\">Δ +0.34</span>\n  </div>\n  <div class=\"ds-metric-card__sparkline\">\n    <svg viewBox=\"0 0 200 28\" preserveAspectRatio=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n      <polyline points=\"0,22 25,20 50,18 75,21 100,15 125,17 150,12 175,10 200,8\" fill=\"none\" stroke=\"#0B84F3\" stroke-width=\"1.5\" stroke-linejoin=\"round\"/>\n    </svg>\n  </div>\n</div>",
+      "css": ".ds-metric-card { background: #FFFFFF; border: 1px solid #D7DEE6; border-radius: 12px; padding: 10px; width: 220px; font-family: 'Segoe UI', system-ui, sans-serif; box-sizing: border-box; } .ds-metric-card__header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; } .ds-metric-card__title { color: #4A5A6A; font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; } .ds-metric-card__value-row { display: flex; align-items: flex-end; gap: 4px; margin-bottom: 2px; } .ds-metric-card__value { font-family: 'DSEG7 Classic', 'Courier New', monospace; font-size: 42px; line-height: 1; color: #0B84F3; } .ds-metric-card__unit { font-size: 16px; font-weight: 600; color: #0B84F3; padding-bottom: 5px; } .ds-metric-card__meta-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; } .ds-metric-card__setpoint { color: #4A5A6A; font-size: 11px; } .ds-metric-card__delta { font-size: 11px; font-weight: 600; } .ds-delta-ok { color: #16A34A; } .ds-delta-warn { color: #DC2626; } .ds-metric-card__sparkline { width: 100%; height: 28px; } .ds-metric-card__sparkline svg { width: 100%; height: 100%; display: block; }"
+    },
+    {
+      "name": "MetricCard — Temperature (with FAN)",
+      "kind": "custom",
+      "refersTo": "metric-card",
+      "description": "Temperature channel card with fan status indicator in the title row.",
+      "html": "<div class=\"ds-metric-card ds-metric-card--temp\">\n  <div class=\"ds-metric-card__header\">\n    <span class=\"ds-metric-card__title\">TEMPERATURE</span>\n    <span class=\"ds-fan-indicator ds-fan-active\">⊙ FAN</span>\n  </div>\n  <div class=\"ds-metric-card__value-row\">\n    <span class=\"ds-metric-card__value ds-metric-card__value--temp\">47.3</span>\n    <span class=\"ds-metric-card__unit ds-metric-card__unit--temp\">°C</span>\n  </div>\n  <div class=\"ds-metric-card__meta-row\">\n    <span class=\"ds-metric-card__setpoint\">Max 48.1 °C</span>\n    <span class=\"ds-metric-card__delta\"></span>\n  </div>\n  <div class=\"ds-metric-card__sparkline\">\n    <svg viewBox=\"0 0 200 28\" preserveAspectRatio=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n      <polyline points=\"0,24 25,22 50,20 75,18 100,16 125,14 150,13 175,12 200,11\" fill=\"none\" stroke=\"#EF4444\" stroke-width=\"1.5\" stroke-linejoin=\"round\"/>\n    </svg>\n  </div>\n</div>",
+      "css": ".ds-metric-card--temp .ds-metric-card__value--temp { color: #EF4444; font-family: 'DSEG7 Classic', 'Courier New', monospace; font-size: 42px; line-height: 1; } .ds-metric-card--temp .ds-metric-card__unit--temp { color: #EF4444; font-size: 16px; font-weight: 600; padding-bottom: 5px; } .ds-fan-indicator { font-size: 11px; } .ds-fan-active { color: #0B84F3; font-weight: 700; } .ds-fan-inactive { color: #4A5A6A; font-weight: 400; }"
+    },
+    {
+      "name": "Button — Base",
+      "kind": "button",
+      "refersTo": "button-base",
+      "description": "Standard action button for secondary controls: Refresh, Export, View, Manage.",
+      "html": "<button class=\"ds-btn-base\">Refresh</button>",
+      "css": ".ds-btn-base { background: #FFFFFF; color: #0F1B2A; border: 1px solid #D7DEE6; border-radius: 6px; padding: 6px 10px; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 10pt; font-weight: 600; cursor: pointer; transition: background 0.15s ease-out; } .ds-btn-base:hover { background: #EBF2FB; } .ds-btn-base:focus-visible { outline: 1px solid #0B84F3; outline-offset: 2px; }"
+    },
+    {
+      "name": "Button — Output START",
+      "kind": "button",
+      "refersTo": "button-output-start",
+      "description": "Primary output action button in active (start) state. Minimum height 56px, full-width within its container.",
+      "html": "<button class=\"ds-btn-output-start\">▶ START OUTPUT</button>",
+      "css": ".ds-btn-output-start { background: #16A34A; color: #FFFFFF; border: none; border-radius: 8px; padding: 12px 20px; min-height: 56px; width: 100%; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 13px; font-weight: 700; cursor: pointer; transition: background 0.15s ease-out; } .ds-btn-output-start:hover { background: #15803d; } .ds-btn-output-start:focus-visible { outline: 2px solid #16A34A; outline-offset: 2px; }"
+    },
+    {
+      "name": "Button — Output STOP",
+      "kind": "button",
+      "refersTo": "button-output-stop",
+      "description": "Primary output action button in active (stop) state. Same dimensions as START; only color and label change.",
+      "html": "<button class=\"ds-btn-output-stop\">■ STOP OUTPUT</button>",
+      "css": ".ds-btn-output-stop { background: #DC2626; color: #FFFFFF; border: none; border-radius: 8px; padding: 12px 20px; min-height: 56px; width: 100%; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 13px; font-weight: 700; cursor: pointer; transition: background 0.15s ease-out; } .ds-btn-output-stop:hover { background: #b91c1c; } .ds-btn-output-stop:focus-visible { outline: 2px solid #DC2626; outline-offset: 2px; }"
+    },
+    {
+      "name": "Status Indicator — Connected",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Connection state badge: status dot + label + contextual button. Four variants: Disconnected, Connecting, Connected, Communication Error.",
+      "html": "<div class=\"ds-status-row\">\n  <span class=\"ds-status-row__label\">Status:</span>\n  <span class=\"ds-status-dot ds-status-dot--connected\">●</span>\n  <span class=\"ds-status-text ds-status-text--connected\">Connected</span>\n</div>",
+      "css": ".ds-status-row { display: flex; align-items: center; gap: 6px; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 10pt; } .ds-status-row__label { color: #0F1B2A; } .ds-status-dot { font-size: 18px; line-height: 1; } .ds-status-dot--connected { color: #22C55E; } .ds-status-dot--disconnected { color: #EF4444; } .ds-status-dot--connecting { color: #EAB308; } .ds-status-dot--error { color: #F97316; } .ds-status-text { font-size: 10pt; color: #0F1B2A; } .ds-status-text--connected { color: #16A34A; font-weight: 600; } .ds-status-text--error { color: #F97316; font-weight: 600; }"
+    },
+    {
+      "name": "Datalogger Running Banner",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Active state banner shown inside the Datalogger panel when logging is in progress.",
+      "html": "<div class=\"ds-log-banner\">DATALOGGING IN CORSO</div>",
+      "css": ".ds-log-banner { background: #dcfce7; color: #14532d; border: 1px solid #86efac; border-radius: 6px; padding: 4px 8px; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 10pt; font-weight: 600; display: inline-block; }"
+    },
+    {
+      "name": "Input / SpinBox",
+      "kind": "input",
+      "refersTo": null,
+      "description": "Numeric input control for setpoints (Vset, Iset, Tmax). Suffix label included inline.",
+      "html": "<div class=\"ds-spinbox\">\n  <input class=\"ds-spinbox__input\" type=\"text\" value=\"12.00\">\n  <span class=\"ds-spinbox__suffix\">V</span>\n</div>",
+      "css": ".ds-spinbox { display: flex; align-items: center; background: #FFFFFF; border: 1px solid #D7DEE6; border-radius: 5px; padding: 4px 6px; gap: 4px; font-family: 'Segoe UI', system-ui, sans-serif; } .ds-spinbox__input { border: none; outline: none; background: transparent; font-family: inherit; font-size: 10pt; color: #0F1B2A; width: 60px; text-align: right; } .ds-spinbox__suffix { font-size: 10pt; color: #4A5A6A; } .ds-spinbox:focus-within { border-color: #0B84F3; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Measurement Console",
+    "overview": "This is instrument software, not application software. The model is the front panel of a professional bench rack unit rendered on screen: every element occupies its exact position, no element is decorative, and the reading is always the most prominent thing visible. The engineer has one question at any given moment: what is the device doing right now? The interface answers that question without asking the user to look for it.\n\nThe palette is deliberately cool and low-saturation except where it carries semantic meaning. Color is reserved for data channels and operational state. When something is blue, green, red, or amber, there is a reason. The system rejects the idea that more color means more engagement.\n\nThis system explicitly refuses three failure modes: the SaaS dashboard with gradient metric cards and icon navigation, the consumer app ported from mobile with oversized touch targets, and the 2000s instrument software with embossed 3D borders and a toolbar crammed with small icons.",
+    "keyCharacteristics": [
+      "Flat surfaces, 1px panel borders, no elevation shadows",
+      "Channel colors (Voltage Blue, Ampere Green, Watt Gold, Critical Red) are the only saturated color on screen — each maps exclusively to one physical quantity",
+      "DSEG7 Classic 7-segment font for all live readings, giving the visual weight of physical display hardware",
+      "Four operational states each have a distinct color signature that is never ambiguous",
+      "Information density is high; layout rhythm creates scannable order, not reduction"
+    ],
+    "rules": [
+      { "name": "The Channel Monopoly Rule", "body": "Each measurement channel color belongs to exactly one physical quantity. Voltage Blue appears in the Voltage card, the voltage graph curve, and nowhere else. Never use Voltage Blue for a primary accent, a hyperlink, or a highlight that is not directly about voltage.", "section": "colors" },
+      { "name": "The Stop-Red Boundary Rule", "body": "#DC2626 (Stop Red) and #EF4444 (Critical Red) are different colors with different roles. Stop Red is for actions that halt something. Critical Red is for the Temperature channel. Do not substitute one for the other.", "section": "colors" },
+      { "name": "The DSEG7 Exclusivity Rule", "body": "DSEG7 Classic is used for live measurement values and nothing else. Not for setpoint inputs. Not for routine step parameters. Not for log timestamps. The 7-segment aesthetic earns its authority by being rare.", "section": "typography" },
+      { "name": "The Seam-Not-Shadow Rule", "body": "When a containment element needs visual separation from its neighbors, add a 1px solid panel-seam border. Never add box-shadow. The rare exception: floating dialogs or dock widgets may use a single ambient shadow (0 4px 16px rgba(15,27,42,0.10)).", "section": "elevation" }
+    ],
+    "dos": [
+      "Do use channel colors exclusively for their assigned physical quantity.",
+      "Do render all live measurement values in DSEG7 Classic at 42px in the channel color.",
+      "Do use 1px solid #D7DEE6 as the only border treatment.",
+      "Do use the four state colors consistently and only for their states.",
+      "Do keep MetricCards at 12px radius, GroupBoxes at 8px, buttons at 6px, inputs at 5px.",
+      "Do keep the Instrument Panel background (#F4F6F8) distinct from Instrument White (#FFFFFF).",
+      "Do set delta label green (#16A34A) when within ±5% of setpoint, red (#DC2626) when outside.",
+      "Do ensure every state communicated by color is also communicated by text or icon."
+    ],
+    "donts": [
+      "Don't build a SaaS dashboard. No gradient metric cards, no icon-only sidebar navigation, no hero metric with a decorative gradient arc.",
+      "Don't use old-school instrument styling: no 3D embossed borders, no raised/sunken bevel effects.",
+      "Don't bring consumer or mobile patterns onto this desktop surface: no floating action buttons, no bottom navigation bar, no oversized tap targets.",
+      "Don't add drop shadows. The elevation model is flat-by-default.",
+      "Don't use DSEG7 Classic for anything other than live measurement values.",
+      "Don't introduce a new saturated color without assigning it a permanent semantic role.",
+      "Don't use border-left or border-right greater than 1px as a colored accent stripe.",
+      "Don't use gradient text (background-clip: text with a gradient). Measurement values are always a single solid channel color.",
+      "Don't use the word dashboard to describe this interface internally or externally. It is a control panel."
+    ]
+  }
+}
