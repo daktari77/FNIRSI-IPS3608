@@ -1,85 +1,85 @@
 # IPS3608 Remote Control
 
-Versione stabile: `1.0.0`
+A portable Python desktop application for controlling the FNIRSI IPS3608 power supply.
+It includes a PySide6 UI, real-time graphs, data logging, preset memories, and a simulation mode for development and testing.
 
-Versione in sviluppo (branch `feature/v2-0-0-planning`): `2.0.0-dev.0`
+## Stable & development versions
 
-Desktop app Python per il controllo del FNIRSI IPS3608, con interfaccia PySide6, grafici realtime, datalogger, memorie M1..M6 e modalità simulata per sviluppo/test.
+- Stable version: `1.0.0`
+- Development branch: `feature/v2-0-0-planning`, version `2.0.0-dev.0`
 
-## Funzionalità
+## Features
 
-- connessione reale via seriale con `pyserial`
-- modalità simulata per usare tutta l'app senza dispositivo collegato
-- controllo output separato dalla connessione PC-dispositivo
-- letture realtime di tensione, corrente, temperatura e potenza calcolata
-- grafico realtime V/I su asse X temporale
-- datalogger con export CSV e tabella log
-- memorie fisse M1..M6 con nome, Vset e Iset persistenti
-- routine con rampe temporali e stop output a fine esecuzione
-- UI modulare con launcher principale
+- real serial control using `pyserial`
+- simulated device mode for testing without hardware
+- separate output control and device connection flow
+- real-time voltage, current, temperature, and computed power readings
+- live V/I plot over time
+- datalogging with CSV export and table view
+- six fixed memory presets (M1..M6) with persistent names, Vset, and Iset
+- ramped routines with end-of-routine output stop
+- modular UI with a clean main launcher
 
-## UI Overview
+## Quick start
 
-```text
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ FNIRSI IPS3608 Remote Control                          ● Connected / Error  │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ Menu: File | Datalogger | Graphs | Routine | Memory | Instrument | Mode     │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ Connection: [COM3 ▼] [Refresh] [Connect] [Disconnect]                       │
-│ Output:     [Vset 12.00 V] [Iset 1.500 A] [START OUTPUT / STOP OUTPUT]      │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ Datalogger: ● OFF / IN CORSO  [1 s ▼] [START LOG] [STOP LOG] [CSV] [Table]  │
-├───────────────────────────────┬──────────────────────────────────────────────┤
-│ Realtime Cards                │ Realtime Graph                               │
-│ [Voltage] [Current]           │  V/I vs Time                                 │
-│ [Temperature] [Power]         │  Y: 0..40 V                                  │
-├───────────────────────────────┴──────────────────────────────────────────────┤
-│ Status Bar: connection | output | datalogger | samples | last data | errors  │
-└──────────────────────────────────────────────────────────────────────────────┘
-```
-
-The layout keeps connection, output control, memories/routines and live feedback
-visually separated so the app reads like a bench instrument, not a generic form.
-
-## Avvio
-
-### Dipendenze
+### Install dependencies
 
 ```powershell
 pip install PySide6 pyqtgraph pyserial
 ```
 
-### Avvio applicazione desktop
+### Run the desktop app
 
 ```powershell
 python ips3608_remote_ui.py
 ```
 
-## Struttura progetto
+### Build a portable Windows bundle
 
-- `ips3608_remote_ui.py`: launcher dell'app desktop
-- `ips3608_app/`: package con UI, client seriale, memorie e routine
-- `ips3608_cli.py`: CLI di supporto
-- `ips3608_gui.py`: mini GUI Tkinter
-- `ips3608_live.ps1`: monitor live PowerShell
-- `CHANGELOG.md`: cronologia release
-- `docs/IPS3608_Documentazione_Obsidian.md`: documentazione operativa
+A portable build is available in `dist/IPS3608RemoteControl` after running:
 
-## Note operative
+```powershell
+pip install pyinstaller
+.\build_portable.ps1
+```
 
-- Range supportati nell'app desktop:
+This build includes the application assets and font file required by `ips3608_app/assets/fonts/DSEG7Classic-Regular.ttf`.
+
+## Project structure
+
+- `ips3608_remote_ui.py`: desktop application launcher
+- `ips3608_app/`: core package with UI, serial client, memory presets, and routines
+- `ips3608_cli.py`: command-line support for direct device control
+- `ips3608_gui.py`: lightweight Tkinter GUI variant
+- `ips3608_live.ps1`: PowerShell live monitoring script
+- `CHANGELOG.md`: release history
+- `docs/IPS3608_Documentazione_Obsidian.md`: operational documentation
+
+## Operational notes
+
+- Supported desktop app ranges:
   - Vset: `0..36.00 V`
   - Iset: `0..8.20 A`
-- Il grafico V/I è limitato al range operativo con asse Y base `0..40 V`.
-- La temperatura resta visibile nelle card realtime, ma non è plottata.
-- Le memorie M1..M6 sono persistenti su file JSON locale.
+- The V/I graph is limited to the operating range, with a default Y-axis up to `40 V`.
+- Temperature is shown in the real-time cards, but it is not plotted.
+- Memory presets are stored locally in JSON files.
 
-## Documentazione
+## Collaboration
 
-- [Documentazione operativa](docs/IPS3608_Documentazione_Obsidian.md)
+This repository is now public and welcomes contributions from external collaborators.
+If you want to contribute:
+
+- open an issue for bugs or feature requests
+- submit a pull request for improvements
+- ask for help if you want to extend simulation, UI, or device support
+
+I am open to external collaboration, code reviews, and pairing on enhancements.
+
+## Documentation
+
+- [Operational documentation](docs/IPS3608_Documentazione_Obsidian.md)
 - [Changelog](CHANGELOG.md)
 
-## Stato progetto
+## Status
 
-Repo inizializzata per sviluppo locale e sincronizzazione su GitHub.
+Repository initialized for local development and GitHub publishing.
