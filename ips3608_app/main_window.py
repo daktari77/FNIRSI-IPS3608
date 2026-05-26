@@ -75,7 +75,6 @@ class MainWindow(QMainWindow):
         self.routines: list[RoutineDefinition] = self.routine_repository.load_all()
         self.active_routine: Optional[ActiveRoutineRunner] = None
         self.active_routine_name: str = "--"
-        self.last_routine_setpoint_mono = 0.0
         mem_path = Path.cwd() / "memory_presets.json"
         if not mem_path.exists():
             mem_path = Path.cwd() / "ips3608_memories.json"
@@ -569,7 +568,6 @@ class MainWindow(QMainWindow):
         self.active_routine = ActiveRoutineRunner(routine)
         self.active_routine.start()
         self.active_routine_name = routine.name
-        self.last_routine_setpoint_mono = 0.0
         self.routine_timer.start()
         self._status(f"Routine started: {routine.name}")
 
@@ -606,10 +604,6 @@ class MainWindow(QMainWindow):
                 self._status(f"Routine completed: {ended_name}")
             return
 
-        now_mono = time.monotonic()
-        if now_mono - self.last_routine_setpoint_mono < 0.2:
-            return
-
         vset, iset, output_on = setpoints
         try:
             self.device_client.set_voltage(vset)
@@ -620,7 +614,6 @@ class MainWindow(QMainWindow):
             self.output_panel.iset_spin.setValue(iset)
             self.output_panel.vset_spin.blockSignals(False)
             self.output_panel.iset_spin.blockSignals(False)
-            self.last_routine_setpoint_mono = now_mono
             self.app_state.last_command = f"ROUTINE_SET {vset:.2f}V {iset:.3f}A"
             if output_on and not self.app_state.output_on:
                 self.start_output()

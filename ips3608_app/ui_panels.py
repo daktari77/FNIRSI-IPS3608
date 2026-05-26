@@ -5,6 +5,7 @@ from collections import deque
 from datetime import datetime
 from typing import Optional
 
+import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
@@ -469,24 +470,23 @@ class GraphPanel(QGroupBox):
     def render(self) -> None:
         if self.is_paused or not self.data_times:
             return
-        now_ts = self.data_times[-1]
+
+        times = np.array(self.data_times)
+        now_ts = times[-1]
         min_ts = now_ts - self.window_seconds
 
-        xs: list[float] = []
-        ys_v: list[float] = []
-        ys_i: list[float] = []
-
-        for idx, ts in enumerate(self.data_times):
-            if ts >= min_ts:
-                xs.append(ts - now_ts)
-                ys_v.append(max(0.0, self.data_v[idx]))
-                ys_i.append(max(0.0, self.data_i[idx]))
+        # np.searchsorted is O(log n) on the monotonically-increasing timestamp
+        # array, vs the previous O(n) Python loop over up to 20 000 points.
+        start = int(np.searchsorted(times, min_ts))
+        xs = times[start:] - now_ts
+        ys_v = np.maximum(0.0, np.array(self.data_v)[start:])
+        ys_i = np.maximum(0.0, np.array(self.data_i)[start:])
 
         self.curve_v.setData(xs, ys_v)
         self.curve_i.setData(xs, ys_i)
         self.plot_main.setXRange(-self.window_seconds, 0.0, padding=0.01)
-        if self.autoscale_enabled and (ys_v or ys_i):
-            y_max = max(ys_v + ys_i)
+        if self.autoscale_enabled and len(xs) > 0:
+            y_max = float(max(ys_v.max(), ys_i.max()))
             y_top = min(40.0, max(1.0, y_max * 1.1))
             self.plot_main.setYRange(0.0, y_top, padding=0.0)
         else:

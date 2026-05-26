@@ -32,11 +32,29 @@ class MemoryRepository:
     def __init__(self, file_path: Path):
         self.file_path = file_path
 
+    _MAX_BACKUPS = 10
+
     def _backup_path(self, suffix: str = "") -> Path:
         backup_dir = self.file_path.parent / "backup" / "v1"
         backup_dir.mkdir(parents=True, exist_ok=True)
         tag = f"_{suffix}" if suffix else ""
         return backup_dir / f"{self.file_path.stem}{tag}_{time.strftime('%Y%m%d_%H%M%S')}.json"
+
+    def _rotate_backups(self) -> None:
+        """Delete oldest backup files, retaining at most _MAX_BACKUPS."""
+        backup_dir = self.file_path.parent / "backup" / "v1"
+        if not backup_dir.exists():
+            return
+        stem = self.file_path.stem
+        files = sorted(
+            (f for f in backup_dir.iterdir() if f.name.startswith(stem) and f.suffix == ".json"),
+            key=lambda f: f.stat().st_mtime,
+        )
+        for old in files[: -self._MAX_BACKUPS]:
+            try:
+                old.unlink()
+            except Exception:
+                pass
 
     def _write_json_atomic(self, payload: object) -> None:
         self.file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -83,6 +101,7 @@ class MemoryRepository:
             "presets": [asdict(p) for p in presets]
         }
         self._write_json_atomic(serializable)
+        self._rotate_backups()
 
 
 class MemoryPresetDialog(QDialog):
@@ -225,6 +244,7 @@ class MemoryPresetDialog(QDialog):
         preset.label = label
         preset.voltage_v = float(self.voltage_spin.value())
         preset.current_a = float(self.current_spin.value())
+        preset.enabled = True
         self._refresh_list()
         self.status_lbl.setText(f"Saved {preset.display_name}")
 
@@ -237,6 +257,7 @@ class MemoryPresetDialog(QDialog):
         preset.label = ""
         preset.voltage_v = 0.0
         preset.current_a = 0.0
+        preset.enabled = False
         self._refresh_list()
         self._load_selected("")
         self.status_lbl.setText(f"Cleared {preset.slot_id}")

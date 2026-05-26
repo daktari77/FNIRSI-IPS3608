@@ -65,6 +65,10 @@ class IPS3608Client:
         try:
             if self._ser.is_open:
                 try:
+                    # Stop output first so the PSU doesn't keep delivering power
+                    # after the PC-side connection drops.
+                    self._send_packet_obj(cmd_output(False))
+                    time.sleep(0.05)
                     self._send_packet_obj(cmd_connect(False))
                     time.sleep(0.05)
                 except Exception:

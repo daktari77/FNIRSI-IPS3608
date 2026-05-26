@@ -57,16 +57,11 @@ class Measurement:
         return self.voltage_v * self.current_a
 
 
-@dataclass
-class LogSample:
-    timestamp: datetime
-    voltage_v: float
-    current_a: float
-    temperature_c: float
-
-    @property
-    def power_w(self) -> float:
-        return self.voltage_v * self.current_a
+# LogSample is a semantic alias for Measurement.
+# Both represent a timestamped V/I/T reading; keeping a distinct name in the
+# public API (log_samples: list[LogSample]) makes the intent clear without
+# duplicating the dataclass definition.
+LogSample = Measurement
 
 
 @dataclass
