@@ -45,11 +45,42 @@ pip install pyinstaller
 
 This build includes the application assets and font file required by `ips3608_app/assets/fonts/DSEG7Classic-Regular.ttf`.
 
+## Scripting CLI wrapper
+
+A lightweight scripting wrapper is available in `ips3608_shell.py` and uses the existing Python library under `ips3608_app/`.
+It is useful for command-line automation, shell scripts, and testing without the GUI.
+
+Example usage:
+
+```powershell
+python ips3608_shell.py --port COM3 status
+python ips3608_shell.py --port COM3 set 5.0 1.0
+python ips3608_shell.py --port COM3 on
+python ips3608_shell.py --simulate status
+```
+
+## Protocol reference
+
+Low-level FNIRSI IPS3608 command and response framing used by the app library:
+
+- Connect: `F1 C1 00 01 01 02`
+- Output on: `F1 B1 DB 01 01 01 DD`
+- Output off: `F1 B1 DB 01 00 00 DC`
+- Disconnect: `F1 C1 00 01 00 00 01`
+- Status response frame header: `F0 A1 C3`
+- Live payload length: `0x0C`
+- Payload float fields:
+  - voltage at bytes 4..7
+  - current at bytes 8..11
+  - power at bytes 12..15
+- Checksum: sum of bytes from index 2 to the penultimate byte, masked to `0xFF`.
+
 ## Project structure
 
 - `ips3608_remote_ui.py`: desktop application launcher
 - `ips3608_app/`: core package with UI, serial client, memory presets, and routines
 - `ips3608_cli.py`: command-line support for direct device control
+- `ips3608_shell.py`: lightweight scripting CLI wrapper around the app library
 - `ips3608_gui.py`: lightweight Tkinter GUI variant
 - `ips3608_live.ps1`: PowerShell live monitoring script
 - `CHANGELOG.md`: release history
