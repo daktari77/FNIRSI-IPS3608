@@ -23,9 +23,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .models import LogSample, Measurement
+from . import theme
+from .models import LogSample, Measurement, UiState
 
 _DIGIT_FONT = "DSEG7 Classic"
+_NO_DATA = "--"
 
 
 class Sparkline(QWidget):
@@ -81,31 +83,34 @@ class MetricCard(QFrame):
         self._show_fan = show_fan
 
         self.title_lbl = QLabel(title)
-        self.title_lbl.setStyleSheet("color: #4A5A6A; font-size: 11px; font-weight: 600; letter-spacing: 1px;")
+        self.title_lbl.setStyleSheet(f"color: {theme.CONSOLE_SLATE}; font-size: 11px; font-weight: 600; letter-spacing: 1px;")
 
         title_row = QHBoxLayout()
         title_row.setContentsMargins(0, 0, 0, 0)
         title_row.addWidget(self.title_lbl, stretch=1)
         if show_fan:
             self.fan_lbl = QLabel("◌ FAN")
-            self.fan_lbl.setStyleSheet("color: #4A5A6A; font-size: 11px;")
+            self.fan_lbl.setStyleSheet(f"color: {theme.CONSOLE_SLATE}; font-size: 11px;")
             self.fan_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             title_row.addWidget(self.fan_lbl)
 
-        self.value_lbl = QLabel(self._fmt.format(0.0))
+        # Starts in the no-data state (Console Slate); the channel color is
+        # asserted on the first live reading via set_value.
+        self.value_lbl = QLabel(_NO_DATA)
         self.value_lbl.setFont(QFont(_DIGIT_FONT, 42))
-        self.value_lbl.setStyleSheet(f"color: {color};")
+        self.value_lbl.setStyleSheet(f"color: {theme.CONSOLE_SLATE};")
 
         self.unit_lbl = QLabel(unit)
-        self.unit_lbl.setStyleSheet(f"color: {color}; font-size: 16px; font-weight: 600;")
+        self.unit_lbl.setStyleSheet(f"color: {theme.CONSOLE_SLATE}; font-size: 16px; font-weight: 600;")
         self.unit_lbl.setAlignment(Qt.AlignBottom)
 
         self.setpoint_lbl = QLabel("")
-        self.setpoint_lbl.setStyleSheet("color: #4A5A6A; font-size: 11px;")
+        self.setpoint_lbl.setStyleSheet(f"color: {theme.CONSOLE_SLATE}; font-size: 11px;")
 
         self.delta_lbl = QLabel("")
-        self.delta_lbl.setStyleSheet("color: #4A5A6A; font-size: 11px;")
+        self.delta_lbl.setStyleSheet(f"color: {theme.CONSOLE_SLATE}; font-size: 11px;")
         self.delta_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self._stale = True
 
         self.sparkline = Sparkline(color, self)
 
@@ -126,6 +131,24 @@ class MetricCard(QFrame):
         layout.addLayout(info_row)
         layout.addWidget(self.sparkline)
 
+    def set_stale(self) -> None:
+        """No-data state: shown when disconnected or on a comm error.
+
+        The readout must never be mistaken for a live ``0.00`` measurement, so
+        the digits dim to Console Slate, the value reads ``--``, and the
+        annotations and sparkline clear.
+        """
+        self._stale = True
+        self.value_lbl.setText(_NO_DATA)
+        self.value_lbl.setStyleSheet(f"color: {theme.CONSOLE_SLATE};")
+        self.unit_lbl.setStyleSheet(f"color: {theme.CONSOLE_SLATE}; font-size: 16px; font-weight: 600;")
+        self.setpoint_lbl.setText("")
+        self.delta_lbl.setText("")
+        self.sparkline.clear()
+        if self._show_fan and hasattr(self, "fan_lbl"):
+            self.fan_lbl.setText("◌ FAN")
+            self.fan_lbl.setStyleSheet(f"color: {theme.CONSOLE_SLATE}; font-size: 11px;")
+
     def set_value(
         self,
         value: float,
@@ -133,6 +156,11 @@ class MetricCard(QFrame):
         sub_text: str = "",
         fan_on: Optional[bool] = None,
     ) -> None:
+        if self._stale:
+            # Returning from a no-data state: re-assert the live channel color.
+            self._stale = False
+            self.value_lbl.setStyleSheet(f"color: {self._color};")
+            self.unit_lbl.setStyleSheet(f"color: {self._color}; font-size: 16px; font-weight: 600;")
         self.value_lbl.setText(self._fmt.format(value))
         self.sparkline.append(value)
 
@@ -143,19 +171,21 @@ class MetricCard(QFrame):
             self.delta_lbl.setText(f"Δ {sign}{self._fmt.format(delta)}")
             threshold = max(abs(setpoint) * 0.05, 10 ** -self._decimals)
             ok = abs(delta) <= threshold
-            delta_color = "#16A34A" if ok else "#DC2626"
+            delta_color = theme.ACTIVE_GREEN_DEEP if ok else theme.STOP_RED
             self.delta_lbl.setStyleSheet(f"color: {delta_color}; font-size: 11px;")
         elif sub_text:
             self.setpoint_lbl.setText(sub_text)
             self.delta_lbl.setText("")
 
         if self._show_fan and fan_on is not None and hasattr(self, "fan_lbl"):
+            # Fan-active is an operational state, not the voltage channel — use
+            # Active Green, never Voltage Blue (Channel Monopoly Rule).
             if fan_on:
                 self.fan_lbl.setText("⊙ FAN")
-                self.fan_lbl.setStyleSheet("color: #0B84F3; font-size: 11px; font-weight: 700;")
+                self.fan_lbl.setStyleSheet(f"color: {theme.ACTIVE_GREEN_DEEP}; font-size: 11px; font-weight: 700;")
             else:
                 self.fan_lbl.setText("◌ FAN")
-                self.fan_lbl.setStyleSheet("color: #4A5A6A; font-size: 11px;")
+                self.fan_lbl.setStyleSheet(f"color: {theme.CONSOLE_SLATE}; font-size: 11px;")
 
 
 _TEMP_EMA_ALPHA = 0.25   # smoothing factor: lower = smoother, higher = more reactive
@@ -170,10 +200,10 @@ class RealtimeCardsPanel(QGroupBox):
         self._temp_ema_init: bool = False
         self._last_temp_display_mono: float = 0.0
 
-        self.volt_card = MetricCard("VOLTAGE", "V", "#0B84F3", decimals=2)
-        self.curr_card = MetricCard("CURRENT", "A", "#00A86B", decimals=3)
-        self.temp_card = MetricCard("TEMPERATURE", "°C", "#EF4444", decimals=1, show_fan=True)
-        self.pow_card = MetricCard("POWER", "W", "#F59E0B", decimals=3)
+        self.volt_card = MetricCard("VOLTAGE", "V", theme.VOLTAGE_BLUE, decimals=2)
+        self.curr_card = MetricCard("CURRENT", "A", theme.AMPERE_GREEN, decimals=3)
+        self.temp_card = MetricCard("TEMPERATURE", "°C", theme.CRITICAL_RED, decimals=1, show_fan=True)
+        self.pow_card = MetricCard("POWER", "W", theme.WATT_GOLD, decimals=3)
 
         grid = QGridLayout(self)
         grid.setSpacing(8)
@@ -181,6 +211,13 @@ class RealtimeCardsPanel(QGroupBox):
         grid.addWidget(self.curr_card, 0, 1)
         grid.addWidget(self.temp_card, 1, 0)
         grid.addWidget(self.pow_card, 1, 1)
+
+    def set_stale(self) -> None:
+        """Put every card into the no-data state and re-arm temperature seeding."""
+        for card in (self.volt_card, self.curr_card, self.temp_card, self.pow_card):
+            card.set_stale()
+        self._temp_ema_init = False
+        self.max_temp = 0.0
 
     def update_measurement(self, m: Measurement, vset: float, iset: float, fan_on: bool = False) -> None:
         # V, I, P update every measurement cycle
@@ -215,10 +252,16 @@ class ConnectionPanel(QGroupBox):
         super().__init__("Connection")
 
         self.port_combo = QComboBox()
+        self.port_combo.setToolTip("Serial port of the IPS3608. Choose SIMULATED to run without hardware.")
         self.refresh_btn = QPushButton("Refresh")
+        self.refresh_btn.setToolTip("Rescan available serial ports.")
         self.conn_btn = QPushButton("Connect")
+        self.conn_btn.setToolTip("Open the serial link to the supply. Output stays off until you start it.")
         self.status_dot = QLabel("●")
         self.status_label = QLabel("Disconnected")
+        self.hint_lbl = QLabel("")
+        self.hint_lbl.setStyleSheet(f"color: {theme.CONSOLE_SLATE}; font-size: 11px;")
+        self.hint_lbl.setWordWrap(True)
 
         row = QHBoxLayout()
         row.addWidget(QLabel("Port:"))
@@ -235,7 +278,8 @@ class ConnectionPanel(QGroupBox):
         layout = QVBoxLayout(self)
         layout.addLayout(row)
         layout.addLayout(st)
-        self.status_dot.setStyleSheet("color: #DC2626; font-size: 18px;")
+        layout.addWidget(self.hint_lbl)
+        self.status_dot.setStyleSheet(f"color: {theme.STOP_RED}; font-size: 18px;")
 
         self.refresh_btn.clicked.connect(self.refresh_ports_requested.emit)
         self.conn_btn.clicked.connect(self._on_conn_btn)
@@ -248,29 +292,37 @@ class ConnectionPanel(QGroupBox):
         else:
             self.disconnect_requested.emit()
 
-    def set_connection_state(self, text: str, color: str) -> None:
-        self.status_label.setText(text)
-        self.status_dot.setStyleSheet(f"color: {color}; font-size: 18px;")
-        if text.lower().startswith("connected"):
-            self.conn_btn.setText("Disconnect")
-            self._connected = True
-            self.conn_btn.setStyleSheet("font-weight: 700; background-color: #dcfce7; color: #166534; border: 1px solid #86efac;")
-        elif text.lower().startswith("disconnected"):
-            self.conn_btn.setText("Connect")
-            self._connected = False
-            self.conn_btn.setStyleSheet("font-weight: 700; background-color: #fee2e2; color: #991b1b; border: 1px solid #fca5a5;")
-        elif text.lower().startswith("connecting"):
-            self.conn_btn.setText("Connect")
-            self._connected = False
-            self.conn_btn.setStyleSheet("font-weight: 700; background-color: #fef9c3; color: #a16207; border: 1px solid #fde047;")
-        elif text.lower().startswith("communication error"):
-            self.conn_btn.setText("Connect")
-            self._connected = False
-            self.conn_btn.setStyleSheet("font-weight: 700; background-color: #fed7aa; color: #b45309; border: 1px solid #fb923c;")
-        else:
-            self.conn_btn.setText("Connect")
-            self._connected = False
-            self.conn_btn.setStyleSheet("")
+    # Single source of truth: UiState -> (label, dot color, button label,
+    # button scheme, connected, recovery hint). Keying off the enum (not
+    # display text) keeps the state machine correct under localization.
+    _STATE_MAP = {
+        UiState.DISCONNECTED:
+            ("Disconnected", theme.STOP_RED, "Connect", theme.CONN_SCHEME_DISCONNECTED, False,
+             "Select a port and press Connect."),
+        UiState.CONNECTING:
+            ("Connecting...", theme.TRANSITIONAL_YELLOW, "Connect", theme.CONN_SCHEME_CONNECTING, False,
+             "Opening the serial link..."),
+        UiState.CONNECTED_OUTPUT_OFF:
+            ("Connected", theme.ACTIVE_GREEN, "Disconnect", theme.CONN_SCHEME_CONNECTED, True, ""),
+        UiState.CONNECTED_OUTPUT_ON:
+            ("Connected", theme.ACTIVE_GREEN, "Disconnect", theme.CONN_SCHEME_CONNECTED, True, ""),
+        UiState.COMMUNICATION_ERROR:
+            ("Communication error", theme.FAULT_ORANGE, "Connect", theme.CONN_SCHEME_ERROR, False,
+             "Link lost. Check the cable and port, then press Connect."),
+    }
+
+    def set_connection_state(self, state: str) -> None:
+        label, dot_color, btn_label, scheme, connected, hint = self._STATE_MAP[state]
+        bg, fg, border = scheme
+        self.status_label.setText(label)
+        self.status_dot.setStyleSheet(f"color: {dot_color}; font-size: 18px;")
+        self.conn_btn.setText(btn_label)
+        self.conn_btn.setStyleSheet(
+            f"font-weight: 700; background-color: {bg}; color: {fg}; border: 1px solid {border};"
+        )
+        self.hint_lbl.setText(hint)
+        self.hint_lbl.setVisible(bool(hint))
+        self._connected = connected
 
     def set_ports(self, ports: list[str], include_simulated: bool) -> None:
         current = self.port_combo.currentText()
@@ -296,12 +348,27 @@ class OutputControlPanel(QGroupBox):
 
     def __init__(self):
         super().__init__("Output Control")
+        self._output_on = False
+        self._armed = False
+
         self.output_status = QLabel("Output OFF")
         self.output_status.setStyleSheet("font-size: 13px; font-weight: 700;")
 
         self.toggle_btn = QPushButton("▶  START OUTPUT")
         self.toggle_btn.setMinimumHeight(56)
         self.toggle_btn.setFont(QFont("Segoe UI", 12, QFont.Bold))
+        self.toggle_btn.setToolTip(
+            "Enabling output energizes the supply. Click once to arm, "
+            "then again within 3 s to confirm. Stopping is immediate."
+        )
+
+        # Enabling output energizes the supply, so the first click arms and the
+        # second confirms (inline, no modal). The arm lapses after a short
+        # window. Stopping is never gated.
+        self._arm_timer = QTimer(self)
+        self._arm_timer.setSingleShot(True)
+        self._arm_timer.setInterval(3000)
+        self._arm_timer.timeout.connect(self._disarm)
 
         self.vset_spin = QDoubleSpinBox()
         self.vset_spin.setRange(0.0, 36.0)
@@ -309,6 +376,7 @@ class OutputControlPanel(QGroupBox):
         self.vset_spin.setSingleStep(0.10)
         self.vset_spin.setValue(12.00)
         self.vset_spin.setSuffix(" V")
+        self.vset_spin.setToolTip("Target output voltage (0–36.00 V). Applied live when connected.")
 
         self.iset_spin = QDoubleSpinBox()
         self.iset_spin.setRange(0.0, 8.2)
@@ -316,13 +384,18 @@ class OutputControlPanel(QGroupBox):
         self.iset_spin.setSingleStep(0.001)
         self.iset_spin.setValue(1.500)
         self.iset_spin.setSuffix(" A")
+        self.iset_spin.setToolTip("Current limit (0–8.20 A). The supply caps output current at this value.")
 
         self.temp_limit_spin = QDoubleSpinBox()
-        self.temp_limit_spin.setRange(0.0, 100.0)
+        self.temp_limit_spin.setRange(0.0, 99.0)  # device validates 0..99 °C
         self.temp_limit_spin.setDecimals(1)
         self.temp_limit_spin.setSingleStep(0.5)
         self.temp_limit_spin.setValue(60.0)
         self.temp_limit_spin.setSuffix(" °C")
+        self.temp_limit_spin.setToolTip(
+            "Over-temperature protection (0–99 °C). Output stops automatically "
+            "when the reading reaches this limit."
+        )
 
         top = QHBoxLayout()
         top.addWidget(self.output_status)
@@ -338,7 +411,7 @@ class OutputControlPanel(QGroupBox):
         setpoint_layout.addWidget(QLabel("Iset:"))
         setpoint_layout.addWidget(self.iset_spin)
         setpoint_layout.addSpacing(16)
-        setpoint_layout.addWidget(QLabel("Tmax:"))
+        setpoint_layout.addWidget(QLabel("OTP:"))
         setpoint_layout.addWidget(self.temp_limit_spin)
         setpoint_layout.addStretch(1)
 
@@ -350,31 +423,60 @@ class OutputControlPanel(QGroupBox):
         self.vset_spin.valueChanged.connect(self.voltage_changed.emit)
         self.iset_spin.valueChanged.connect(self.current_changed.emit)
         self.temp_limit_spin.valueChanged.connect(self.temperature_limit_changed.emit)
+
+        # Logical keyboard tab order through the setpoints to the action button.
+        self.setTabOrder(self.vset_spin, self.iset_spin)
+        self.setTabOrder(self.iset_spin, self.temp_limit_spin)
+        self.setTabOrder(self.temp_limit_spin, self.toggle_btn)
+
         self.set_output_state(False)
 
     def _on_toggle(self) -> None:
-        if "START" in self.toggle_btn.text():
+        if self._output_on:
+            # Stopping is never gated.
+            self.stop_output_requested.emit()
+        elif self._armed:
+            self._disarm()
             self.start_output_requested.emit()
         else:
-            self.stop_output_requested.emit()
+            self._arm()
+
+    def _arm(self) -> None:
+        self._armed = True
+        self.toggle_btn.setText("▶  CONFIRM START")
+        self.toggle_btn.setStyleSheet(
+            "font-weight: 700; font-size: 13px;"
+            f"background-color: {theme.TRANSITIONAL_YELLOW}; color: {theme.INSTRUMENT_INK};"
+            "border: none; border-radius: 8px;"
+        )
+        self._arm_timer.start()
+
+    def _disarm(self) -> None:
+        self._arm_timer.stop()
+        if self._armed:
+            self._armed = False
+            self.set_output_state(self._output_on)
 
     def set_output_state(self, on: bool) -> None:
+        self._output_on = on
+        self._armed = False
+        self._arm_timer.stop()
         if on:
             self.output_status.setText("Output ON")
-            self.output_status.setStyleSheet("color: #16A34A; font-size: 13px; font-weight: 700;")
+            self.output_status.setStyleSheet(f"color: {theme.ACTIVE_GREEN_DEEP}; font-size: 13px; font-weight: 700;")
             self.toggle_btn.setText("■  STOP OUTPUT")
             self.toggle_btn.setStyleSheet(
                 "font-weight: 700; font-size: 13px;"
-                "background-color: #DC2626; color: #FFFFFF;"
+                f"background-color: {theme.STOP_RED}; color: {theme.INSTRUMENT_WHITE};"
                 "border: none; border-radius: 8px;"
             )
         else:
             self.output_status.setText("Output OFF")
-            self.output_status.setStyleSheet("color: #DC2626; font-size: 13px; font-weight: 700;")
+            self.output_status.setStyleSheet(f"color: {theme.STOP_RED}; font-size: 13px; font-weight: 700;")
             self.toggle_btn.setText("▶  START OUTPUT")
             self.toggle_btn.setStyleSheet(
                 "font-weight: 700; font-size: 13px;"
-                "background-color: #16A34A; color: #FFFFFF;"
+                f"background-color: {theme.ACTIVE_GREEN_DEEP}; color: {theme.INSTRUMENT_WHITE};"
                 "border: none; border-radius: 8px;"
             )
 
@@ -388,7 +490,6 @@ class GraphPanel(QGroupBox):
         self.data_times: deque[float] = deque(maxlen=20000)
         self.data_v: deque[float] = deque(maxlen=20000)
         self.data_i: deque[float] = deque(maxlen=20000)
-        self.data_t: deque[float] = deque(maxlen=20000)
 
         self.pause_btn = QPushButton("Pause")
         self.reset_btn = QPushButton("Reset")
@@ -402,15 +503,15 @@ class GraphPanel(QGroupBox):
         self.update_combo.setCurrentText("500 ms")
 
         self.plot_main = pg.PlotWidget(title="V / I vs Time")
-        self.plot_main.setBackground("#FFFFFF")
+        self.plot_main.setBackground(theme.INSTRUMENT_WHITE)
         self.plot_main.showGrid(x=True, y=True, alpha=0.2)
         self.plot_main.setLabel("bottom", "Time", units="s")
         self.plot_main.setLabel("left", "Value")
         self.plot_main.addLegend()
         self.plot_main.setYRange(0.0, 40.0, padding=0.0)
 
-        self.curve_v = self.plot_main.plot([], [], pen=pg.mkPen(QColor("#0B84F3"), width=2), name="Voltage (V)")
-        self.curve_i = self.plot_main.plot([], [], pen=pg.mkPen(QColor("#00A86B"), width=2), name="Current (A)")
+        self.curve_v = self.plot_main.plot([], [], pen=pg.mkPen(QColor(theme.VOLTAGE_BLUE), width=2), name="Voltage (V)")
+        self.curve_i = self.plot_main.plot([], [], pen=pg.mkPen(QColor(theme.AMPERE_GREEN), width=2), name="Current (A)")
 
         controls = QHBoxLayout()
         controls.addWidget(self.pause_btn)
@@ -458,13 +559,11 @@ class GraphPanel(QGroupBox):
         self.data_times.append(ts)
         self.data_v.append(m.voltage_v)
         self.data_i.append(m.current_a)
-        self.data_t.append(m.temperature_c)
 
     def clear(self) -> None:
         self.data_times.clear()
         self.data_v.clear()
         self.data_i.clear()
-        self.data_t.clear()
         self.render()
 
     def render(self) -> None:
@@ -503,10 +602,10 @@ class DataloggerPanel(QGroupBox):
         super().__init__("Datalogger")
         self.status_dot = QLabel("●")
         self.status_label = QLabel("OFF")
-        self.running_banner = QLabel("DATALOGGING IN CORSO")
+        self.running_banner = QLabel("DATALOGGING ACTIVE")
         self.running_banner.setStyleSheet(
-            "color: #14532d; background: #dcfce7; padding: 4px 8px;"
-            "border-radius: 6px; border: 1px solid #86efac;"
+            f"color: {theme.BANNER_TEXT}; background: {theme.BANNER_BG}; padding: 4px 8px;"
+            f"border-radius: 6px; border: 1px solid {theme.BANNER_BORDER};"
         )
         self.running_banner.setVisible(False)
 
@@ -562,12 +661,12 @@ class DataloggerPanel(QGroupBox):
 
     def set_logging_state(self, on: bool) -> None:
         if on:
-            self.status_label.setText("IN CORSO")
-            self.status_dot.setStyleSheet("color: #16A34A; font-size: 18px;")
+            self.status_label.setText("ACTIVE")
+            self.status_dot.setStyleSheet(f"color: {theme.ACTIVE_GREEN}; font-size: 18px;")
             self.running_banner.setVisible(True)
         else:
             self.status_label.setText("OFF")
-            self.status_dot.setStyleSheet("color: #DC2626; font-size: 18px;")
+            self.status_dot.setStyleSheet(f"color: {theme.STOP_RED}; font-size: 18px;")
             self.running_banner.setVisible(False)
 
     def update_stats(self, samples: int, duration_sec: int, last_sample: Optional[datetime]) -> None:
@@ -611,17 +710,21 @@ class StatusLogPanel(QGroupBox):
         last_command: str,
         last_error: str,
     ) -> None:
-        self.summary_lbl.setText(
-            "State: "
-            f"{conn_text} | "
-            f"{output_text} | "
-            f"Datalogger {datalogger_text} | "
-            f"Samples: {sample_count} | "
-            f"Last data: {last_data} | "
-            f"Last cmd: {last_command}"
-        )
+        # Rich text gives the dense one-liner hierarchy: the operational state
+        # (connection, output) is bold; stable fields stay muted; an active
+        # error is bold red so it can't hide among the stable fields.
+        sep = f"<span style='color:{theme.CONSOLE_SLATE}'> | </span>"
+        parts = [
+            f"State: <b>{conn_text}</b>",
+            f"<b>{output_text}</b>",
+            f"<span style='color:{theme.CONSOLE_SLATE}'>Datalogger {datalogger_text}</span>",
+            f"<span style='color:{theme.CONSOLE_SLATE}'>Samples: {sample_count}</span>",
+            f"<span style='color:{theme.CONSOLE_SLATE}'>Last data: {last_data}</span>",
+            f"<span style='color:{theme.CONSOLE_SLATE}'>Last cmd: {last_command}</span>",
+        ]
         if last_error != "--":
-            self.summary_lbl.setText(self.summary_lbl.text() + f" | Error: {last_error}")
+            parts.append(f"<b style='color:{theme.STOP_RED}'>Error: {last_error}</b>")
+        self.summary_lbl.setText(sep.join(parts))
 
     def add_log_line(self, message: str) -> None:
         ts = datetime.now().strftime("%H:%M:%S")

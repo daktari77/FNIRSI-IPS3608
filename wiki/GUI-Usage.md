@@ -15,12 +15,19 @@ Connection and output are **decoupled**: connecting does *not* turn on the outpu
 ## Output control
 
 - **Set voltage** (0–36.00 V) and **set current** (0–8.20 A) via the Output Control panel.
-- **Output ON/OFF** arms/disarms power delivery. On disconnect the app stops the output first, then closes the link, so the PSU never keeps delivering after the PC drops.
+- **Output enable is arm-to-confirm**: the first click on START arms (button turns yellow, `▶ CONFIRM START`); a second click within ~3 s confirms and energizes. The arm lapses silently otherwise. **Stopping is never gated** — STOP acts immediately.
+- **OTP** (over-temperature protection, 0–99 °C): the output stops automatically when the reading reaches this limit.
+- On disconnect the app stops the output first, then closes the link, so the PSU never keeps delivering after the PC drops.
 
 ## Real-time readings
 
 - Cards show **V, I, P (computed = V×I), T** with a 7-segment DSEG7 font for arm's-length readability.
-- A **fan indicator** is inferred from temperature (≥ 45 °C); the device controls the fan in firmware — no serial register is exposed.
+- **No-data state**: when disconnected, connecting, or on a communication error the cards show `--` in muted slate (not a misleading `0.00`). The channel color returns on the first live reading.
+- A **fan indicator** is inferred from temperature (≥ 45 °C) and shown in Active Green when on; the device controls the fan in firmware — no serial register is exposed.
+
+## Keyboard
+
+Menus carry mnemonics (`Alt`+letter) and key actions have shortcuts: Connect `Ctrl+K`, Disconnect `Ctrl+Shift+K`, Start output `Ctrl+Return`, Stop output `Ctrl+.`, Start/Stop logging `Ctrl+L` / `Ctrl+Shift+L`, Pause graphs `Ctrl+P`, Export CSV `Ctrl+E`. Tab order runs Vset → Iset → OTP → output button. Hover any control for a tooltip.
 
 ## Live graph
 
@@ -59,12 +66,19 @@ Connessione e output sono **disaccoppiati**: connettersi *non* accende l'uscita.
 ## Controllo output
 
 - **Imposta tensione** (0–36.00 V) e **corrente** (0–8.20 A) dal pannello Output Control.
-- **Output ON/OFF** arma/disarma l'erogazione. Alla disconnessione l'app ferma prima l'uscita e poi chiude il collegamento, così l'alimentatore non continua a erogare dopo lo scollegamento del PC.
+- **L'abilitazione output è arm-to-confirm**: il primo click su START arma (il pulsante diventa giallo, `▶ CONFIRM START`); un secondo click entro ~3 s conferma ed eroga. Altrimenti l'arm decade in silenzio. **Lo stop non è mai bloccato** — STOP agisce subito.
+- **OTP** (protezione sovratemperatura, 0–99 °C): l'uscita si ferma automaticamente quando la lettura raggiunge il limite.
+- Alla disconnessione l'app ferma prima l'uscita e poi chiude il collegamento, così l'alimentatore non continua a erogare dopo lo scollegamento del PC.
 
 ## Letture realtime
 
 - Le card mostrano **V, I, P (calcolata = V×I), T** con font 7 segmenti DSEG7, leggibili a distanza di un braccio.
-- L'**indicatore ventola** è dedotto dalla temperatura (≥ 45 °C); il dispositivo gestisce la ventola via firmware — nessun registro seriale esposto.
+- **Stato no-data**: quando disconnesso, in connessione o su errore di comunicazione le card mostrano `--` in slate attenuato (non un fuorviante `0.00`). Il colore del canale torna alla prima lettura valida.
+- L'**indicatore ventola** è dedotto dalla temperatura (≥ 45 °C) e mostrato in Active Green quando attiva; il dispositivo gestisce la ventola via firmware — nessun registro seriale esposto.
+
+## Tastiera
+
+I menu hanno mnemonici (`Alt`+lettera) e le azioni chiave hanno scorciatoie: Connect `Ctrl+K`, Disconnect `Ctrl+Shift+K`, Start output `Ctrl+Return`, Stop output `Ctrl+.`, Start/Stop logging `Ctrl+L` / `Ctrl+Shift+L`, Pause graphs `Ctrl+P`, Export CSV `Ctrl+E`. L'ordine di tabulazione è Vset → Iset → OTP → pulsante output. Passa il mouse su un controllo per il tooltip.
 
 ## Grafico live
 

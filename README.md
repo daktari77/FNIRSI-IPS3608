@@ -36,14 +36,14 @@ python ips3608_remote_ui.py
 
 ### Build a portable Windows bundle
 
-A portable build is available in `dist/IPS3608RemoteControl` after running:
+A portable build is produced in `dist/FNIRSI-IPS3608` after running:
 
 ```powershell
 pip install pyinstaller
 .\build_portable.ps1
 ```
 
-This build includes the application assets and font file required by `ips3608_app/assets/fonts/DSEG7Classic-Regular.ttf`.
+The script builds from `IPS3608RemoteControl.spec`, which is the single source of truth for the bundle (output name, windowed mode, and the font asset `ips3608_app/assets/fonts/DSEG7Classic-Regular.ttf`). On Linux/macOS use `./build_portable.sh`.
 
 ## Scripting CLI wrapper
 

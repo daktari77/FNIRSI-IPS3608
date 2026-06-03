@@ -194,7 +194,8 @@ The signature component. Four instances — one per measurement channel — occu
 - **Setpoint annotation:** 11px, Console Slate, `"Set {value} {unit}"` format
 - **Delta:** 11px, Active Green Deep (`#16A34A`) when within 5% tolerance, Stop Red (`#DC2626`) when outside
 - **Sparkline:** 28px height, channel color, 1.5px line, 60-sample window, no axes
-- **Fan indicator (Temperature card only):** `◌ FAN` / `⊙ FAN` in top-right of title row; inactive state is Console Slate, active state is Voltage Blue (`#0B84F3`) at 700 weight
+- **Fan indicator (Temperature card only):** `◌ FAN` / `⊙ FAN` in top-right of title row; inactive state is Console Slate, active state is Active Green Deep (`#16A34A`) at 700 weight. Fan-active is an operational state, not the voltage channel, so it never uses Voltage Blue (Channel Monopoly Rule)
+- **No-data / stale state:** when disconnected, connecting, or on a communication error the reading shows `--` in Console Slate with the sparkline cleared. A no-data card must never be mistaken for a live `0.00` measurement. On the next valid reading the card re-asserts its channel color
 
 ### Buttons
 
@@ -212,6 +213,7 @@ Two behavioral families: base controls and output action buttons.
 - START state: Active Green Deep (`#16A34A`) bg, white text, `▶ START OUTPUT` label
 - STOP state: Stop Red (`#DC2626`) bg, white text, `■ STOP OUTPUT` label
 - The button is the full-width call-to-action for the Output Control panel. Its color changes entirely between states — not just tinted, replaced.
+- **Arm-to-confirm (enable only):** enabling output energizes the supply, so the first click arms (Transitional Yellow bg, `▶ CONFIRM START`) and a second click within ~3 s confirms; the arm lapses silently otherwise. Stopping is never gated. This is an inline guard, not a modal.
 
 **Connection button** (contextual, 4 states):
 - Connected: Instrument White bg tinted `#dcfce7`, Dark Green (`#166534`) text, `#86efac` border — "Disconnect"
@@ -223,7 +225,7 @@ Two behavioral families: base controls and output action buttons.
 
 - Style: Instrument White bg, `1px solid {panel-seam}` border, 5px radius, `4px` padding
 - Text: Instrument Ink, Body style
-- No custom focus ring defined in current implementation — inherits system default. Future: `1px solid {voltage-blue}` focus ring without glow (instrument precision, not web affordance).
+- Focus ring: `1px solid {voltage-blue}` border on `:focus`, no glow (instrument precision, not web affordance). Applied to buttons, ComboBoxes, and SpinBoxes via the central stylesheet.
 - Suffix labels (` V`, ` A`, ` °C`) are rendered inline by QDoubleSpinBox — treat as part of the input, not a trailing label.
 
 ### GroupBox Panels

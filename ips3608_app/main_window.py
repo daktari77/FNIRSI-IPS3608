@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from . import theme
 from .clients import IPS3608Client, SimulatedIPS3608Client
 from .memory_presets import MemoryPresetDialog, MemoryRepository
 from . import __version__
@@ -109,21 +110,25 @@ class MainWindow(QMainWindow):
     def _build_menu(self) -> None:
         menu = self.menuBar()
 
-        file_menu = menu.addMenu("File")
-        self.act_export_file = QAction("Export log CSV", self)
-        self.act_open_shell = QAction("Open scripting shell", self)
-        self.act_exit = QAction("Exit", self)
+        file_menu = menu.addMenu("&File")
+        self.act_export_file = QAction("&Export log CSV", self)
+        self.act_export_file.setShortcut("Ctrl+E")
+        self.act_open_shell = QAction("Open scripting &shell", self)
+        self.act_exit = QAction("E&xit", self)
+        self.act_exit.setShortcut("Ctrl+Q")
         file_menu.addAction(self.act_export_file)
         file_menu.addAction(self.act_open_shell)
         file_menu.addSeparator()
         file_menu.addAction(self.act_exit)
 
-        datalogger_menu = menu.addMenu("Datalogger")
-        self.act_log_start = QAction("Start logging", self)
-        self.act_log_stop = QAction("Stop logging", self)
-        self.act_log_table = QAction("View log table", self)
-        self.act_log_clear = QAction("Clear current log", self)
-        self.act_log_export = QAction("Export log CSV", self)
+        datalogger_menu = menu.addMenu("&Datalogger")
+        self.act_log_start = QAction("&Start logging", self)
+        self.act_log_start.setShortcut("Ctrl+L")
+        self.act_log_stop = QAction("Sto&p logging", self)
+        self.act_log_stop.setShortcut("Ctrl+Shift+L")
+        self.act_log_table = QAction("View log &table", self)
+        self.act_log_clear = QAction("&Clear current log", self)
+        self.act_log_export = QAction("Export log CS&V", self)
         datalogger_menu.addActions([
             self.act_log_start,
             self.act_log_stop,
@@ -132,26 +137,31 @@ class MainWindow(QMainWindow):
             self.act_log_export,
         ])
 
-        graph_menu = menu.addMenu("Graphs")
-        self.act_graph_pause = QAction("Pause graphs", self)
-        self.act_graph_reset = QAction("Reset graphs", self)
-        self.act_graph_autoscale = QAction("Autoscale", self)
+        graph_menu = menu.addMenu("&Graphs")
+        self.act_graph_pause = QAction("&Pause graphs", self)
+        self.act_graph_pause.setShortcut("Ctrl+P")
+        self.act_graph_reset = QAction("&Reset graphs", self)
+        self.act_graph_autoscale = QAction("&Autoscale", self)
         graph_menu.addActions([self.act_graph_pause, self.act_graph_reset, self.act_graph_autoscale])
 
-        routine_menu = menu.addMenu("Routine")
-        self.act_routine_manage = QAction("Manage routines", self)
-        self.act_routine_stop = QAction("Stop active routine", self)
+        routine_menu = menu.addMenu("&Routine")
+        self.act_routine_manage = QAction("&Manage routines", self)
+        self.act_routine_stop = QAction("&Stop active routine", self)
         routine_menu.addActions([self.act_routine_manage, self.act_routine_stop])
 
-        memory_menu = menu.addMenu("Memory")
-        self.act_memory_manage = QAction("Manage memories M1..M6", self)
+        memory_menu = menu.addMenu("Me&mory")
+        self.act_memory_manage = QAction("&Manage memories M1..M6", self)
         memory_menu.addAction(self.act_memory_manage)
 
-        instrument_menu = menu.addMenu("Instrument")
-        self.act_connect = QAction("Connect", self)
-        self.act_disconnect = QAction("Disconnect", self)
-        self.act_output_start = QAction("Start Output", self)
-        self.act_output_stop = QAction("Stop Output", self)
+        instrument_menu = menu.addMenu("&Instrument")
+        self.act_connect = QAction("&Connect", self)
+        self.act_connect.setShortcut("Ctrl+K")
+        self.act_disconnect = QAction("&Disconnect", self)
+        self.act_disconnect.setShortcut("Ctrl+Shift+K")
+        self.act_output_start = QAction("Start &Output", self)
+        self.act_output_start.setShortcut("Ctrl+Return")
+        self.act_output_stop = QAction("St&op Output", self)
+        self.act_output_stop.setShortcut("Ctrl+.")
         instrument_menu.addActions([
             self.act_connect,
             self.act_disconnect,
@@ -159,9 +169,11 @@ class MainWindow(QMainWindow):
             self.act_output_stop,
         ])
 
-        mode_menu = menu.addMenu("Mode")
-        self.act_mode_real = QAction("Real mode", self, checkable=True)
-        self.act_mode_sim = QAction("Simulated mode", self, checkable=True)
+        mode_menu = menu.addMenu("M&ode")
+        self.act_mode_real = QAction("&Real mode", self, checkable=True)
+        self.act_mode_real.setToolTip("Control a physical IPS3608 over the serial port.")
+        self.act_mode_sim = QAction("&Simulated mode", self, checkable=True)
+        self.act_mode_sim.setToolTip("Drive the UI without hardware; readings are synthetic.")
         mode_group = QActionGroup(self)
         mode_group.setExclusive(True)
         mode_group.addAction(self.act_mode_real)
@@ -241,38 +253,7 @@ class MainWindow(QMainWindow):
         self.temperature_limit = value
 
     def _apply_style(self) -> None:
-        self.setStyleSheet(
-            """
-            QMainWindow { background-color: #F4F6F8; color: #0F1B2A; }
-            QGroupBox {
-                border: 1px solid #D7DEE6; border-radius: 8px; margin-top: 10px;
-                font-weight: 700; color: #0F1B2A; background: #FFFFFF;
-            }
-            QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 6px; }
-            QLabel { color: #0F1B2A; }
-            QPushButton {
-                background-color: #FFFFFF; color: #0F1B2A; border: 1px solid #D7DEE6;
-                border-radius: 6px; padding: 6px 10px; font-weight: 600;
-            }
-            QPushButton:hover { background-color: #EBF2FB; }
-            QComboBox, QDoubleSpinBox {
-                background-color: #FFFFFF; border: 1px solid #D7DEE6; border-radius: 5px;
-                padding: 4px; color: #0F1B2A;
-            }
-            QTableWidget {
-                background-color: #FFFFFF; color: #0F1B2A; gridline-color: #D7DEE6;
-                border: 1px solid #D7DEE6;
-            }
-            QHeaderView::section {
-                background-color: #F4F6F8; color: #0F1B2A; border: 1px solid #D7DEE6;
-                padding: 4px; font-weight: 600;
-            }
-            QTextEdit { background-color: #FFFFFF; border: 1px solid #D7DEE6; color: #0F1B2A; }
-            QFrame#MetricCard {
-                background-color: #FFFFFF; border: 1px solid #D7DEE6; border-radius: 12px;
-            }
-            """
-        )
+        self.setStyleSheet(theme.APP_STYLESHEET)
 
     def _status(self, text: str) -> None:
         self.statusBar().showMessage(text, 6000)
@@ -496,8 +477,8 @@ class MainWindow(QMainWindow):
             self.stop_output()
             QMessageBox.warning(
                 self,
-                "Temperatura Superata",
-                f"Temperatura {m.temperature_c:.1f}°C >= soglia {self.temperature_limit:.1f}°C. Output spento automaticamente.",
+                "Over-temperature",
+                f"Temperature {m.temperature_c:.1f}°C >= limit {self.temperature_limit:.1f}°C. Output stopped automatically.",
             )
 
         fan_on = m.temperature_c >= _FAN_ON_THRESHOLD_C
@@ -777,40 +758,42 @@ class MainWindow(QMainWindow):
         output_on = self.app_state.output_on
         logging_on = self.app_state.logging_on
 
+        self.connection_panel.set_connection_state(state)
+
         if state == UiState.DISCONNECTED:
             self.connection_panel.conn_btn.setEnabled(True)
-            self.connection_panel.set_connection_state("Disconnected", "#ef4444")
             self.output_panel.toggle_btn.setEnabled(False)
             self.output_panel.set_output_state(False)
             self.datalogger_panel.start_btn.setEnabled(False)
             self.datalogger_panel.stop_btn.setEnabled(False)
         elif state == UiState.CONNECTING:
             self.connection_panel.conn_btn.setEnabled(False)
-            self.connection_panel.set_connection_state("Connecting...", "#eab308")
             self.output_panel.toggle_btn.setEnabled(False)
             self.datalogger_panel.start_btn.setEnabled(False)
             self.datalogger_panel.stop_btn.setEnabled(False)
         elif state == UiState.CONNECTED_OUTPUT_OFF:
             self.connection_panel.conn_btn.setEnabled(True)
-            self.connection_panel.set_connection_state("Connected", "#22c55e")
             self.output_panel.toggle_btn.setEnabled(True)
             self.output_panel.set_output_state(False)
             self.datalogger_panel.start_btn.setEnabled(not logging_on)
             self.datalogger_panel.stop_btn.setEnabled(logging_on)
         elif state == UiState.CONNECTED_OUTPUT_ON:
             self.connection_panel.conn_btn.setEnabled(True)
-            self.connection_panel.set_connection_state("Connected", "#22c55e")
             self.output_panel.toggle_btn.setEnabled(True)
             self.output_panel.set_output_state(True)
             self.datalogger_panel.start_btn.setEnabled(not logging_on)
             self.datalogger_panel.stop_btn.setEnabled(logging_on)
         elif state == UiState.COMMUNICATION_ERROR:
             self.connection_panel.conn_btn.setEnabled(True)
-            self.connection_panel.set_connection_state("Communication error", "#f97316")
             self.output_panel.toggle_btn.setEnabled(False)
             self.output_panel.set_output_state(False)
             self.datalogger_panel.start_btn.setEnabled(False)
             self.datalogger_panel.stop_btn.setEnabled(False)
+
+        # The readout must read as "no link", not a live zero, whenever the
+        # device isn't delivering measurements.
+        if state in (UiState.DISCONNECTED, UiState.CONNECTING, UiState.COMMUNICATION_ERROR):
+            self.cards_panel.set_stale()
 
         self.act_connect.setEnabled(not connected)
         self.act_disconnect.setEnabled(connected)

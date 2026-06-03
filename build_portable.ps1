@@ -1,10 +1,11 @@
 <#
 .SYNOPSIS
-Build a portable Windows application bundle for IPS3608 Remote Control.
+Build a portable Windows application bundle for FNIRSI IPS3608 Remote Control.
 
 .DESCRIPTION
-Creates a one-directory portable build in dist\IPS3608RemoteControl
-using PyInstaller. The app bundle includes the font asset under ips3608_app/assets.
+Creates a one-directory portable build in dist\FNIRSI-IPS3608 using PyInstaller,
+driven by IPS3608RemoteControl.spec (single source of truth for the build:
+output name, bundled font asset under ips3608_app/assets, windowed mode).
 #>
 
 $ErrorActionPreference = "Stop"
@@ -25,16 +26,10 @@ try {
     exit 1
 }
 
-$distName = "IPS3608RemoteControl"
-Remove-Item -Recurse -Force "build\$distName" -ErrorAction SilentlyContinue
-Remove-Item -Recurse -Force "dist\$distName" -ErrorAction SilentlyContinue
-Remove-Item -Force "$distName.spec" -ErrorAction SilentlyContinue
+& $python -m PyInstaller --noconfirm --clean IPS3608RemoteControl.spec
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "PyInstaller build failed (exit $LASTEXITCODE)."
+    exit $LASTEXITCODE
+}
 
-& $python -m PyInstaller --noconfirm --clean `
-    --onedir `
-    --windowed `
-    --name $distName `
-    --add-data "ips3608_app/assets;ips3608_app/assets" `
-    ips3608_remote_ui.py
-
-Write-Host "Portable build complete: dist\$distName"
+Write-Host "Portable build complete: dist\FNIRSI-IPS3608"

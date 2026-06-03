@@ -3,9 +3,6 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$script_dir"
 
-python -m PyInstaller --noconfirm --clean \
-  --onedir \
-  --windowed \
-  --name IPS3608RemoteControl \
-  --add-data "ips3608_app/assets:ips3608_app/assets" \
-  ips3608_remote_ui.py
+# Driven by IPS3608RemoteControl.spec (single source of truth: output name
+# FNIRSI-IPS3608, bundled font asset, windowed mode).
+python -m PyInstaller --noconfirm --clean IPS3608RemoteControl.spec
